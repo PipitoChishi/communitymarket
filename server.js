@@ -1,0 +1,381 @@
+/* ══════════════════════════════════════════════════════
+   CommunityMarket – server.js
+   Express REST API  ·  Uses sql.js
+   ══════════════════════════════════════════════════════ */
+
+'use strict';
+
+const express     = require('express');
+const cors        = require('cors');
+const { initDb, toRows } = require('./db');
+
+const app  = express();
+const PORT = process.env.PORT || 3001;
+
+// ── Middleware ───────────────────────────────────────────
+app.use(cors());
+app.use(express.json());
+app.use(express.static(__dirname));  // serve index.html, style.css, app.js
+
+// ── Logger ───────────────────────────────────────────────
+app.use((req, _res, next) => {
+  console.log(`[${new Date().toLocaleTimeString()}] ${req.method} ${req.path}`);
+  next();
+});
+
+// ── Globals set after DB init ────────────────────────────
+let db;
+let save;
+
+// ════════════════════════════════════════════════════════
+// HELPERS
+// ════════════════════════════════════════════════════════
+function relativeTime(isoString) {
+  if (!isoString) return 'unknown';
+  const diff = Math.floor((Date.now() - new Date(isoString).getTime()) / 1000);
+  if (diff < 60)    return `${diff}s ago`;
+  if (diff < 3600)  return `${Math.floor(diff / 60)} min ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)} hr ago`;
+  return `${Math.floor(diff / 86400)} days ago`;
+}
+
+function pctChange(price, prev) {
+  if (!prev || prev === 0) return { value: 0, direction: 'flat' };
+  const v = ((price - prev) / prev) * 100;
+  return { value: parseFloat(Math.abs(v).toFixed(1)), direction: v > 0 ? 'up' : v < 0 ? 'down' : 'flat' };
+}
+
+// sql.js query → array of objects
+function query(sql, params = []) {
+  return toRows(db.exec(sql, params));
+}
+
+// sql.js query → single object or null
+function queryOne(sql, params = []) {
+  const rows = query(sql, params);
+  return rows[0] || null;
+}
+
+// sql.js run (INSERT/UPDATE/DELETE) + return last inserted row
+function run(sql, params = []) {
+  db.run(sql, params);
+  save();
+}
+
+// ════════════════════════════════════════════════════════
+// ROUTES
+// ════════════════════════════════════════════════════════
+
+// ── GET /api/health ──────────────────────────────────────
+app.get('/api/health', (_req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// ── GET /api/stats ───────────────────────────────────────
+app.get('/api/stats', (_req, res) => {
+  try {
+    const reports    = queryOne('SELECT COUNT(*) AS c FROM price_reports').c;
+    const contribs   = queryOne('SELECT COUNT(*) AS c FROM contributors').c;
+    const cities     = queryOne('SELECT COUNT(DISTINCT city) AS c FROM price_reports').c;
+    const categories = queryOne('SELECT COUNT(DISTINCT name) AS c FROM price_reports').c;
+    res.json({ reports, contribs, cities, categories });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch stats' });
+  }
+});
+
+// ── GET /api/ticker ──────────────────────────────────────
+app.get('/api/ticker', (_req, res) => {
+  try {
+    const CAT_EMOJI = {
+      groceries:'🛒', vegetables:'🍅', fuel:'⛽',
+      electronics:'💻', clothing:'👕', medicine:'💊',
+      transport:'🚗', housing:'🏠'
+    };
+    const rows = query(
+      'SELECT name, price, prev_price, category FROM price_reports ORDER BY created_at DESC LIMIT 20'
+    );
+    const items = rows.map(r => {
+      const ch = pctChange(r.price, r.prev_price);
+      return {
+        name:   r.name.length > 16 ? r.name.slice(0, 14) + '…' : r.name,
+        price:  `₹${r.price}`,
+        change: `${ch.value}%`,
+        up:     ch.direction === 'up',
+        icon:   CAT_EMOJI[r.category] || '📦',
+      };
+    });
+    res.json(items);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch ticker' });
+  }
+});
+
+// ── GET /api/overview ────────────────────────────────────
+app.get('/api/overview', (_req, res) => {
+  try {
+    const META = {
+      groceries:   { icon:'🛒', label:'Groceries Avg',  unit:'kg',    meta:'Based on community reports' },
+      fuel:        { icon:'⛽', label:'Fuel Price',      unit:'litre', meta:'Pan-India average'           },
+      vegetables:  { icon:'🥦', label:'Vegetables Avg', unit:'kg',    meta:'Seasonal variation'          },
+      electronics: { icon:'💻', label:'Electronics',    unit:'piece', meta:'Top products avg'            },
+      clothing:    { icon:'👕', label:'Clothing',       unit:'piece', meta:'Mid-range category'          },
+      transport:   { icon:'🚗', label:'Transport',      unit:'trip',  meta:'Auto fare average'           },
+      medicine:    { icon:'💊', label:'Medicine',       unit:'pack',  meta:'Generic drug avg'            },
+      housing:     { icon:'🏠', label:'Avg Rent 1BHK',  unit:'month', meta:'Metro city average'          },
+    };
+
+    const rows = query(`
+      SELECT   category,
+               ROUND(AVG(price),2)      AS avg_price,
+               ROUND(AVG(prev_price),2) AS avg_prev,
+               COUNT(*)                 AS report_count
+      FROM     price_reports
+      GROUP BY category
+      ORDER BY category
+    `);
+
+    const cards = rows.map(r => {
+      const m   = META[r.category] || { icon:'📦', label:r.category, unit:'', meta:'' };
+      const ch  = pctChange(r.avg_price, r.avg_prev);
+      const disp = r.avg_price >= 1000
+        ? `₹${(r.avg_price/1000).toFixed(1)}k/${m.unit}`
+        : `₹${r.avg_price}/${m.unit}`;
+      return {
+        category:  r.category,
+        icon:      m.icon,
+        label:     m.label,
+        price:     disp,
+        change:    `${ch.direction === 'up' ? '+' : ch.direction === 'down' ? '-' : ''}${ch.value}%`,
+        up:        ch.direction === 'up',
+        meta:      `${m.meta} · ${r.report_count} report${r.report_count !== 1 ? 's' : ''}`,
+      };
+    });
+    res.json(cards);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch overview' });
+  }
+});
+
+// ── GET /api/chart/:category ─────────────────────────────
+app.get('/api/chart/:category', (req, res) => {
+  try {
+    const { category } = req.params;
+    const allowed = ['groceries', 'fuel', 'vegetables', 'electronics'];
+    if (!allowed.includes(category)) {
+      return res.status(400).json({ error: 'Invalid category' });
+    }
+    const rows = query(
+      'SELECT recorded_at AS date, price FROM price_history WHERE category = ? ORDER BY recorded_at ASC',
+      [category]
+    );
+    const LABELS = {
+      groceries:   'Groceries Avg (₹/kg)',
+      fuel:        'Petrol (₹/L)',
+      vegetables:  'Vegetables Avg (₹/kg)',
+      electronics: 'Electronics (₹ 000s)',
+    };
+    const COLORS = {
+      groceries:'#7c6bff', fuel:'#f97316', vegetables:'#34d399', electronics:'#38bdf8'
+    };
+    res.json({
+      category,
+      label:  LABELS[category],
+      color:  COLORS[category],
+      points: rows.map(r => ({ date: r.date, price: r.price })),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch chart data' });
+  }
+});
+
+// ── GET /api/products ────────────────────────────────────
+app.get('/api/products', (req, res) => {
+  try {
+    const { category, search, sort, limit = 100, offset = 0 } = req.query;
+
+    let sql    = 'SELECT * FROM price_reports WHERE 1=1';
+    const params = [];
+
+    if (category && category !== 'all') {
+      sql += ' AND category = ?';
+      params.push(category);
+    }
+    if (search) {
+      sql += ' AND (name LIKE ? OR city LIKE ? OR store LIKE ?)';
+      const q = `%${search}%`;
+      params.push(q, q, q);
+    }
+
+    switch (sort) {
+      case 'price-asc':  sql += ' ORDER BY price ASC';  break;
+      case 'price-desc': sql += ' ORDER BY price DESC'; break;
+      case 'change':
+        sql += ' ORDER BY ABS(price - IFNULL(prev_price, price)) / MAX(IFNULL(prev_price,1),1) DESC';
+        break;
+      default: sql += ' ORDER BY created_at DESC';
+    }
+
+    sql += ' LIMIT ? OFFSET ?';
+    params.push(parseInt(limit), parseInt(offset));
+
+    const rows = query(sql, params);
+    res.json(rows.map(r => ({
+      ...r,
+      verified:  r.verified === 1,
+      time:      relativeTime(r.created_at),
+      pctChange: pctChange(r.price, r.prev_price),
+    })));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch products' });
+  }
+});
+
+// ── GET /api/products/:id ────────────────────────────────
+app.get('/api/products/:id', (req, res) => {
+  try {
+    const row = queryOne('SELECT * FROM price_reports WHERE id = ?', [parseInt(req.params.id)]);
+    if (!row) return res.status(404).json({ error: 'Product not found' });
+    res.json({ ...row, verified: row.verified === 1, time: relativeTime(row.created_at) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch product' });
+  }
+});
+
+// ── POST /api/products ───────────────────────────────────
+app.post('/api/products', (req, res) => {
+  try {
+    const { name, category, price, unit, store, city, reporter, note } = req.body;
+
+    if (!name || !category || price === undefined || price === null) {
+      return res.status(400).json({ error: 'name, category, and price are required' });
+    }
+    const numericPrice = parseFloat(price);
+    if (isNaN(numericPrice) || numericPrice < 0) {
+      return res.status(400).json({ error: 'price must be a positive number' });
+    }
+
+    // Find most recent price for same product
+    const prevRow = queryOne(
+      'SELECT price FROM price_reports WHERE LOWER(name) = LOWER(?) AND category = ? ORDER BY created_at DESC LIMIT 1',
+      [name, category]
+    );
+    const prev_price = prevRow ? prevRow.price : null;
+
+    const reporterName = (reporter || '').trim() || 'Anonymous';
+    const storeName    = (store  || '').trim() || 'Unknown Store';
+    const cityName     = (city   || '').trim() || 'Unknown City';
+    const noteVal      = (note   || '').trim() || null;
+
+    // Insert report
+    run(
+      `INSERT INTO price_reports (name,category,price,prev_price,unit,store,city,reporter,note)
+       VALUES (?,?,?,?,?,?,?,?,?)`,
+      [name.trim(), category, numericPrice, prev_price, unit||'per kg', storeName, cityName, reporterName, noteVal]
+    );
+
+    // Get the inserted row (last insert)
+    const newRow = queryOne('SELECT * FROM price_reports ORDER BY id DESC LIMIT 1');
+
+    // Upsert contributor (100 pts per report)
+    const POINTS = 100;
+    const existing = queryOne('SELECT * FROM contributors WHERE username = ?', [reporterName]);
+    if (existing) {
+      run('UPDATE contributors SET points = points + ?, city = ? WHERE username = ?', [POINTS, cityName, reporterName]);
+    } else {
+      run('INSERT INTO contributors (username, city, points) VALUES (?,?,?)', [reporterName, cityName, POINTS]);
+    }
+
+    res.status(201).json({
+      ...newRow,
+      verified:      false,
+      time:          'just now',
+      pctChange:     pctChange(numericPrice, prev_price),
+      pointsAwarded: POINTS,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to submit report' });
+  }
+});
+
+// ── GET /api/leaderboard ─────────────────────────────────
+app.get('/api/leaderboard', (_req, res) => {
+  try {
+    const rows = query('SELECT * FROM contributors ORDER BY points DESC LIMIT 10');
+    const MEDALS = { 1:'🥇', 2:'🥈', 3:'🥉' };
+    const result = rows.map((r, i) => {
+      const rank    = i + 1;
+      const reports = queryOne(
+        'SELECT COUNT(*) AS c FROM price_reports WHERE reporter = ?', [r.username]
+      )?.c || 0;
+      return {
+        rank,
+        medal:    MEDALS[rank] || String(rank),
+        username: r.username,
+        avatar:   r.avatar || '🧑',
+        city:     r.city,
+        reports,
+        points:   r.points,
+        badges:   JSON.parse(r.badges || '[]'),
+      };
+    });
+    res.json(result);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch leaderboard' });
+  }
+});
+
+// ── GET /api/feed ────────────────────────────────────────
+app.get('/api/feed', (_req, res) => {
+  try {
+    const AVATARS = ['🧑','👩','🧔','👨','👩‍💼','🧓','👩‍🍳','👨‍💻'];
+    const rows = query(
+      'SELECT name, price, unit, city, reporter, created_at FROM price_reports ORDER BY created_at DESC LIMIT 6'
+    );
+    res.json(rows.map(r => ({
+      avatar:  AVATARS[Math.floor(Math.random() * AVATARS.length)],
+      name:    r.reporter,
+      product: `${r.name} – ₹${r.price} ${r.unit}`,
+      city:    r.city,
+      time:    relativeTime(r.created_at),
+    })));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch feed' });
+  }
+});
+
+// ── 404 catch-all ────────────────────────────────────────
+app.use('/api/*', (_req, res) => {
+  res.status(404).json({ error: 'Endpoint not found' });
+});
+
+// ════════════════════════════════════════════════════════
+// START SERVER
+// ════════════════════════════════════════════════════════
+async function start() {
+  const { db: sqlDb, saveDb } = await initDb();
+  db   = sqlDb;
+  save = saveDb;
+
+  app.listen(PORT, () => {
+    console.log('');
+    console.log('  🛒  CommunityMarket API running!');
+    console.log(`  🌐 App   → http://localhost:${PORT}/`);
+    console.log(`  📡 API   → http://localhost:${PORT}/api/health`);
+    console.log('');
+  });
+}
+
+start().catch(err => {
+  console.error('❌ Failed to start server:', err);
+  process.exit(1);
+});

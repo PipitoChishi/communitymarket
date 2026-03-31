@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CommunityMarket – Track Real Market Prices Together</title>
+  <meta name="description" content="CommunityMarket: Track real-time market prices submitted by your community. Compare, analyze, and stay ahead of price changes across categories." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Outfit:wght@400;600;700;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ───────── NAVIGATION ───────── -->
+  <nav class="navbar" id="navbar">
+    <div class="nav-inner">
+      <a href="#" class="nav-logo">
+        <span class="logo-icon">🛒</span>
+        <span class="logo-text">Community<strong>Market</strong></span>
+      </a>
+      <div class="nav-links">
+        <a href="#dashboard" class="nav-link active" id="nav-dashboard">Dashboard</a>
+        <a href="#products" class="nav-link" id="nav-products">Products</a>
+        <a href="#submit" class="nav-link" id="nav-submit">Submit Price</a>
+        <a href="#leaderboard" class="nav-link" id="nav-leaderboard">Leaderboard</a>
+      </div>
+      <div class="nav-actions">
+        <button class="btn-ghost" id="locationBtn">📍 Set Location</button>
+        <button class="btn-primary" id="openSubmitModal">+ Report Price</button>
+      </div>
+      <button class="hamburger" id="hamburger" aria-label="Menu">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- ───────── MOBILE MENU ───────── -->
+  <div class="mobile-menu" id="mobileMenu">
+    <a href="#dashboard" class="mob-link" onclick="closeMobile()">Dashboard</a>
+    <a href="#products" class="mob-link" onclick="closeMobile()">Products</a>
+    <a href="#submit" class="mob-link" onclick="closeMobile()">Submit Price</a>
+    <a href="#leaderboard" class="mob-link" onclick="closeMobile()">Leaderboard</a>
+    <button class="btn-primary" onclick="openModal();closeMobile()">+ Report Price</button>
+  </div>
+
+  <!-- ───────── HERO ───────── -->
+  <section class="hero" id="dashboard">
+    <div class="hero-bg"></div>
+    <div class="hero-content">
+      <div class="hero-badge">🌐 Community Powered · Real-Time</div>
+      <h1 class="hero-title">India's <span class="gradient-text">Community Market</span><br>Price Tracker</h1>
+      <p class="hero-sub">Join thousands of contributors reporting real prices from local markets, stores, and online shops. Together we track, together we save.</p>
+      <div class="hero-actions">
+        <button class="btn-primary btn-lg" onclick="openModal()">📢 Report a Price</button>
+        <a href="#products" class="btn-outline btn-lg">Explore Prices →</a>
+      </div>
+      <div class="hero-stats">
+        <div class="stat-pill"><span class="stat-num" id="statReports">12,847</span><span class="stat-lbl">Price Reports</span></div>
+        <div class="stat-pill"><span class="stat-num" id="statProducts">3,200+</span><span class="stat-lbl">Products Tracked</span></div>
+        <div class="stat-pill"><span class="stat-num" id="statUsers">8,591</span><span class="stat-lbl">Contributors</span></div>
+        <div class="stat-pill"><span class="stat-num" id="statCities">240+</span><span class="stat-lbl">Cities</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────── ALERTS TICKER ───────── -->
+  <div class="ticker-wrap">
+    <div class="ticker-label">🔔 LIVE UPDATES</div>
+    <div class="ticker-track" id="tickerTrack"></div>
+  </div>
+
+  <!-- ───────── DASHBOARD CARDS ───────── -->
+  <section class="section" id="overview">
+    <div class="container">
+      <div class="section-header">
+        <h2 class="section-title">Market Overview</h2>
+        <p class="section-sub">Today's price movements at a glance</p>
+      </div>
+      <div class="overview-grid" id="overviewGrid"></div>
+    </div>
+  </section>
+
+  <!-- ───────── CHART SECTION ───────── -->
+  <section class="section section-dark">
+    <div class="container">
+      <div class="section-header">
+        <h2 class="section-title">Price Trends</h2>
+        <p class="section-sub">30-day price history for top categories</p>
+      </div>
+      <div class="chart-tabs">
+        <button class="chart-tab active" data-cat="groceries">🛒 Groceries</button>
+        <button class="chart-tab" data-cat="fuel">⛽ Fuel</button>
+        <button class="chart-tab" data-cat="vegetables">🥦 Vegetables</button>
+        <button class="chart-tab" data-cat="electronics">💻 Electronics</button>
+      </div>
+      <div class="chart-container">
+        <canvas id="priceChart"></canvas>
+      </div>
+      <div class="chart-legend" id="chartLegend"></div>
+    </div>
+  </section>
+
+  <!-- ───────── PRODUCTS ───────── -->
+  <section class="section" id="products">
+    <div class="container">
+      <div class="section-header">
+        <h2 class="section-title">Browse Products</h2>
+        <p class="section-sub">Community-reported prices across all categories</p>
+      </div>
+
+      <!-- Search & Filter -->
+      <div class="filter-bar">
+        <div class="search-wrap">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="searchInput" placeholder="Search products…" />
+        </div>
+        <div class="filter-pills" id="filterPills"></div>
+        <select id="sortSelect" class="sort-select">
+          <option value="recent">Most Recent</option>
+          <option value="price-asc">Price: Low → High</option>
+          <option value="price-desc">Price: High → Low</option>
+          <option value="change">Biggest Change</option>
+        </select>
+      </div>
+
+      <div class="products-grid" id="productsGrid"></div>
+      <div class="load-more-wrap">
+        <button class="btn-outline" id="loadMoreBtn">Load More Products</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────── SUBMIT SECTION ───────── -->
+  <section class="section section-dark" id="submit">
+    <div class="container">
+      <div class="submit-cta">
+        <div class="submit-cta-content">
+          <h2 class="section-title">Spot a Price?<br><span class="gradient-text">Share It!</span></h2>
+          <p>Help your community by reporting prices you see at local markets, grocery stores, or online. Every report matters.</p>
+          <ul class="cta-benefits">
+            <li>✅ Earn contributor points</li>
+            <li>✅ Help neighbors save money</li>
+            <li>✅ Build price history data</li>
+            <li>✅ Anonymous or named reporting</li>
+          </ul>
+          <button class="btn-primary btn-lg" onclick="openModal()">Report a Price Now</button>
+        </div>
+        <div class="submit-cta-visual">
+          <div class="cta-card">
+            <div class="cta-card-header">Recent Community Reports</div>
+            <div id="recentFeed"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────── LEADERBOARD ───────── -->
+  <section class="section" id="leaderboard">
+    <div class="container">
+      <div class="section-header">
+        <h2 class="section-title">Top Contributors 🏆</h2>
+        <p class="section-sub">Community members keeping prices accurate</p>
+      </div>
+      <div class="lb-grid">
+        <div class="lb-table-wrap">
+          <table class="lb-table" id="lbTable"></table>
+        </div>
+        <div class="lb-sidebar">
+          <div class="lb-badge-card">
+            <h3>Your Stats</h3>
+            <div class="your-stat"><span class="y-num">47</span><span class="y-lbl">Reports Submitted</span></div>
+            <div class="your-stat"><span class="y-num">1,240</span><span class="y-lbl">Points Earned</span></div>
+            <div class="your-stat"><span class="y-num">#128</span><span class="y-lbl">Global Rank</span></div>
+            <div class="badges-row" id="badgesRow"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────── FOOTER ───────── -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <span class="logo-icon">🛒</span><span class="logo-text">Community<strong>Market</strong></span>
+          <p>India's community-driven platform for transparent market pricing. Together we track, together we save.</p>
+        </div>
+        <div class="footer-col">
+          <h4>Platform</h4>
+          <a href="#">Dashboard</a><a href="#">Products</a><a href="#">Leaderboard</a><a href="#">API Access</a>
+        </div>
+        <div class="footer-col">
+          <h4>Community</h4>
+          <a href="#">Guidelines</a><a href="#">Report Abuse</a><a href="#">Discord</a><a href="#">Newsletter</a>
+        </div>
+        <div class="footer-col">
+          <h4>About</h4>
+          <a href="#">How It Works</a><a href="#">Privacy Policy</a><a href="#">Terms of Use</a><a href="#">Contact</a>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>© 2026 CommunityMarket. All rights reserved.</p>
+        <p>Made with ❤️ for smarter shopping across India.</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ───────── SUBMIT PRICE MODAL ───────── -->
+  <div class="modal-overlay" id="modalOverlay" onclick="handleOverlayClick(event)">
+    <div class="modal" id="modal">
+      <div class="modal-header">
+        <h2>📢 Report a Price</h2>
+        <button class="modal-close" id="modalClose" onclick="closeModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <form id="priceForm" onsubmit="submitPrice(event)">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="productName">Product Name *</label>
+              <input type="text" id="productName" placeholder="e.g. Basmati Rice 5kg" required />
+            </div>
+            <div class="form-group">
+              <label for="productCategory">Category *</label>
+              <select id="productCategory" required>
+                <option value="">Select category…</option>
+                <option value="groceries">🛒 Groceries</option>
+                <option value="vegetables">🥦 Vegetables & Fruits</option>
+                <option value="fuel">⛽ Fuel & Energy</option>
+                <option value="electronics">💻 Electronics</option>
+                <option value="clothing">👕 Clothing</option>
+                <option value="medicine">💊 Medicine</option>
+                <option value="transport">🚗 Transport</option>
+                <option value="housing">🏠 Housing</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="productPrice">Price (₹) *</label>
+              <input type="number" id="productPrice" placeholder="0.00" min="0" step="0.01" required />
+            </div>
+            <div class="form-group">
+              <label for="productUnit">Unit</label>
+              <select id="productUnit">
+                <option value="per kg">per kg</option>
+                <option value="per litre">per litre</option>
+                <option value="per piece">per piece</option>
+                <option value="per dozen">per dozen</option>
+                <option value="per pack">per pack</option>
+                <option value="per month">per month</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="storeName">Store / Market Name</label>
+              <input type="text" id="storeName" placeholder="e.g. Big Bazaar, Local Mandi" />
+            </div>
+            <div class="form-group">
+              <label for="locationName">Location / City</label>
+              <input type="text" id="locationName" placeholder="e.g. Mumbai, Delhi" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="reporterName">Your Name (optional)</label>
+            <input type="text" id="reporterName" placeholder="Anonymous if left blank" />
+          </div>
+          <div class="form-group">
+            <label for="priceNote">Additional Notes</label>
+            <textarea id="priceNote" placeholder="Any context, brand, quality grade, etc." rows="3"></textarea>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn-ghost" onclick="closeModal()">Cancel</button>
+            <button type="submit" class="btn-primary" id="submitBtn">Submit Report ✓</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────── TOAST ───────── -->
+  <div id="toast" class="toast"></div>
+
+  <!-- ───────── SCRIPTS ───────── -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

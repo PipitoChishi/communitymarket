@@ -1,0 +1,14 @@
+# Render deployment config for CommunityMarket
+services:
+  - type: web
+    name: communitymarket
+    runtime: node
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+    disk:
+      name: db
+      mountPath: /opt/render/project/src
+      sizeGB: 1
