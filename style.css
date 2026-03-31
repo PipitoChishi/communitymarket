@@ -652,3 +652,62 @@ input, select, textarea { font-family:inherit; }
 /* Fix standard appearance property (lint) */
 .form-group select { appearance:none; -webkit-appearance:none; }
 
+/* ════ STAR RATING ════ */
+.stars-row {
+  display:flex; gap:6px; margin-bottom:8px;
+}
+.star-btn {
+  font-size:2rem; cursor:pointer; color:var(--text3);
+  transition:color 0.15s, transform 0.15s;
+  line-height:1;
+}
+.star-btn:hover, .star-btn.active { color:#fbbf24; transform:scale(1.15); }
+.star-label {
+  font-size:0.82rem; color:var(--text3); height:18px;
+}
+
+/* Inline stars display on cards */
+.pc-stars {
+  display:inline-flex; align-items:center; gap:3px;
+  font-size:0.72rem; font-weight:600; color:#fbbf24;
+}
+.pc-stars .star-count { color:var(--text3); }
+.pc-rating-btn {
+  font-size:0.72rem; color:var(--accent); cursor:pointer;
+  background:none; border:none; padding:0 4px;
+  text-decoration:underline; font-family:inherit;
+}
+.pc-rating-btn:hover { color:var(--accent2); }
+
+/* Rating summary in modal */
+.rating-modal { max-width:500px; }
+.rating-summary {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--radius); padding:16px 20px; margin-bottom:20px;
+  display:flex; align-items:center; gap:20px;
+}
+.rs-big-num {
+  font-family:'Outfit',sans-serif; font-size:3rem; font-weight:900;
+  color:#fbbf24; line-height:1;
+}
+.rs-stars { font-size:1.1rem; color:#fbbf24; margin-bottom:4px; }
+.rs-count { font-size:0.8rem; color:var(--text3); }
+.rs-bars { flex:1; display:flex; flex-direction:column; gap:4px; }
+.rs-bar-row { display:flex; align-items:center; gap:8px; font-size:0.78rem; color:var(--text3); }
+.rs-bar-track { flex:1; height:6px; background:var(--surface2); border-radius:99px; overflow:hidden; }
+.rs-bar-fill { height:100%; background:#fbbf24; border-radius:99px; transition:width 0.5s ease; }
+
+/* Recent reviews section */
+.recent-reviews { margin-top:16px; }
+.review-item {
+  padding:12px 0; border-bottom:1px solid var(--border);
+  display:flex; flex-direction:column; gap:4px;
+}
+.review-header { display:flex; align-items:center; justify-content:space-between; }
+.review-name { font-weight:600; font-size:0.88rem; }
+.review-stars { color:#fbbf24; font-size:0.9rem; }
+.review-date { font-size:0.72rem; color:var(--text3); }
+.review-comment { font-size:0.85rem; color:var(--text2); }
+.star-rating-input { margin-bottom:8px; }
+
+

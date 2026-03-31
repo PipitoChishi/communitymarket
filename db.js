@@ -112,18 +112,21 @@ async function initDb() {
     );
 
     CREATE TABLE IF NOT EXISTS price_reports (
-      id          INTEGER PRIMARY KEY AUTOINCREMENT,
-      name        TEXT    NOT NULL,
-      category    TEXT    NOT NULL,
-      price       REAL    NOT NULL,
-      prev_price  REAL,
-      unit        TEXT    DEFAULT 'per kg',
-      store       TEXT    DEFAULT 'Unknown Store',
-      city        TEXT    DEFAULT 'Unknown City',
-      reporter    TEXT    DEFAULT 'Anonymous',
-      note        TEXT,
-      verified    INTEGER DEFAULT 0,
-      created_at  TEXT    DEFAULT (datetime('now'))
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      name            TEXT    NOT NULL,
+      category        TEXT    NOT NULL,
+      price           REAL    NOT NULL,
+      prev_price      REAL,
+      unit            TEXT    DEFAULT 'per kg',
+      store           TEXT    DEFAULT 'Unknown Store',
+      city            TEXT    DEFAULT 'Unknown City',
+      reporter        TEXT    DEFAULT 'Anonymous',
+      reporter_id     INTEGER,
+      reporter_role   TEXT    DEFAULT 'anonymous',
+      reporter_shop   TEXT,
+      note            TEXT,
+      verified        INTEGER DEFAULT 0,
+      created_at      TEXT    DEFAULT (datetime('now'))
     );
 
     CREATE TABLE IF NOT EXISTS price_history (
@@ -141,8 +144,28 @@ async function initDb() {
       points   INTEGER DEFAULT 0,
       badges   TEXT    DEFAULT '[]'
     );
+
+    CREATE TABLE IF NOT EXISTS seller_ratings (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      seller_id   INTEGER NOT NULL,
+      rater_id    INTEGER,
+      rater_name  TEXT    DEFAULT 'Anonymous',
+      rating      INTEGER NOT NULL CHECK(rating BETWEEN 1 AND 5),
+      comment     TEXT,
+      created_at  TEXT    DEFAULT (datetime('now')),
+      FOREIGN KEY(seller_id) REFERENCES users(id)
+    );
   `);
 
+  // ── Migrations (safe: ignore errors if columns already exist) ───
+  const migrations = [
+    `ALTER TABLE price_reports ADD COLUMN reporter_id   INTEGER`,
+    `ALTER TABLE price_reports ADD COLUMN reporter_role TEXT DEFAULT 'anonymous'`,
+    `ALTER TABLE price_reports ADD COLUMN reporter_shop TEXT`,
+  ];
+  for (const m of migrations) {
+    try { db.run(m); } catch (_) { /* column already exists */ }
+  }
   // ── Seed reports ─────────────────────────────────────
   const [[{ count: reportCount }]] = db.exec('SELECT COUNT(*) AS count FROM price_reports').map(r =>
     r.values.map(v => Object.fromEntries(r.columns.map((c,i) => [c, v[i]])))

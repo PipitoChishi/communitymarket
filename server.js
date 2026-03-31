@@ -277,11 +277,21 @@ app.post('/api/products', (req, res) => {
     const noteVal      = (note   || '').trim() || null;
 
     // Insert report
+    let reporterRole = req.user?.role || 'anonymous';
+    let reporterShop = null;
+    if (reporterRole === 'seller') {
+      // shop_name may not be in old JWTs; fall back to DB
+      reporterShop = req.user?.shop_name ||
+        queryOne('SELECT shop_name FROM users WHERE id = ?', [req.user?.id])?.shop_name ||
+        storeName;
+    }
     run(
-      `INSERT INTO price_reports (name,category,price,prev_price,unit,store,city,reporter,note)
-       VALUES (?,?,?,?,?,?,?,?,?)`,
-      [name.trim(), category, numericPrice, prev_price, unit||'per kg', storeName, cityName, reporterName, noteVal]
+      `INSERT INTO price_reports (name,category,price,prev_price,unit,store,city,reporter,reporter_id,reporter_role,reporter_shop,note)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [name.trim(), category, numericPrice, prev_price, unit||'per kg', storeName, cityName,
+       reporterName, req.user?.id || null, reporterRole, reporterShop, noteVal]
     );
+
 
     // Get the inserted row (last insert)
     const newRow = queryOne('SELECT * FROM price_reports ORDER BY id DESC LIMIT 1');
@@ -408,7 +418,7 @@ app.post('/api/auth/register', async (req, res) => {
 
     const user = queryOne('SELECT * FROM users ORDER BY id DESC LIMIT 1');
     const token = jwt.sign(
-      { id: user.id, name: user.name, email: user.email, role: user.role },
+      { id: user.id, name: user.name, email: user.email, role: user.role, shop_name: user.shop_name },
       JWT_SECRET,
       { expiresIn: '30d' }
     );
@@ -440,7 +450,7 @@ app.post('/api/auth/login', async (req, res) => {
     if (!match) return res.status(401).json({ error: 'Invalid email or password' });
 
     const token = jwt.sign(
-      { id: user.id, name: user.name, email: user.email, role: user.role },
+      { id: user.id, name: user.name, email: user.email, role: user.role, shop_name: user.shop_name },
       JWT_SECRET,
       { expiresIn: '30d' }
     );
@@ -463,10 +473,104 @@ app.get('/api/auth/me', authMiddleware, (req, res) => {
   res.json(user);
 });
 
-// ── 404 catch-all ────────────────────────────────────────
+// ── GET /api/sellers ─────────────────────────────────────
+app.get('/api/sellers', (_req, res) => {
+  try {
+    const sellers = query(`
+      SELECT u.id, u.name, u.shop_name, u.shop_category, u.city,
+             ROUND(AVG(sr.rating), 1)  AS avg_rating,
+             COUNT(sr.id)              AS rating_count,
+             COUNT(DISTINCT pr.id)     AS report_count
+      FROM   users u
+      LEFT JOIN seller_ratings sr ON sr.seller_id = u.id
+      LEFT JOIN price_reports  pr ON pr.reporter_id = u.id
+      WHERE  u.role = 'seller'
+      GROUP BY u.id
+      ORDER BY avg_rating DESC
+    `);
+    res.json(sellers);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch sellers' });
+  }
+});
+
+// ── GET /api/sellers/:id/ratings ─────────────────────────
+app.get('/api/sellers/:id/ratings', (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const seller = queryOne(
+      'SELECT id, name, shop_name, shop_category, city FROM users WHERE id = ? AND role = ?',
+      [id, 'seller']
+    );
+    if (!seller) return res.status(404).json({ error: 'Seller not found' });
+
+    const ratings = query(
+      'SELECT rater_name, rating, comment, created_at FROM seller_ratings WHERE seller_id = ? ORDER BY created_at DESC LIMIT 20',
+      [id]
+    );
+    const agg = queryOne(
+      'SELECT ROUND(AVG(rating),1) AS avg_rating, COUNT(*) AS total FROM seller_ratings WHERE seller_id = ?',
+      [id]
+    );
+    const dist = query(
+      'SELECT rating, COUNT(*) AS count FROM seller_ratings WHERE seller_id = ? GROUP BY rating ORDER BY rating DESC',
+      [id]
+    );
+    res.json({ seller, ratings, avg_rating: agg?.avg_rating || 0, total: agg?.total || 0, distribution: dist });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch ratings' });
+  }
+});
+
+// ── POST /api/sellers/:id/rate ────────────────────────────
+app.post('/api/sellers/:id/rate', (req, res) => {
+  try {
+    const sellerId = parseInt(req.params.id);
+    const { rating, comment, rater_name } = req.body;
+
+    const numRating = parseInt(rating);
+    if (!numRating || numRating < 1 || numRating > 5) {
+      return res.status(400).json({ error: 'Rating must be 1–5' });
+    }
+    const seller = queryOne('SELECT id FROM users WHERE id = ? AND role = ?', [sellerId, 'seller']);
+    if (!seller) return res.status(404).json({ error: 'Seller not found' });
+
+    // Decode JWT if present (optional auth)
+    let raterId = null, raterDisplayName = (rater_name || 'Anonymous').trim();
+    const header = req.headers.authorization || '';
+    const token  = header.startsWith('Bearer ') ? header.slice(7) : null;
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        raterId = decoded.id;
+        raterDisplayName = decoded.name;
+        if (raterId === sellerId) return res.status(400).json({ error: 'You cannot rate yourself' });
+      } catch (_) {}
+    }
+
+    run(
+      'INSERT INTO seller_ratings (seller_id, rater_id, rater_name, rating, comment) VALUES (?,?,?,?,?)',
+      [sellerId, raterId, raterDisplayName, numRating, (comment || '').trim() || null]
+    );
+
+    const agg = queryOne(
+      'SELECT ROUND(AVG(rating),1) AS avg_rating, COUNT(*) AS total FROM seller_ratings WHERE seller_id = ?',
+      [sellerId]
+    );
+    res.status(201).json({ success: true, avg_rating: agg.avg_rating, total: agg.total });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to submit rating' });
+  }
+});
+
+// ── 404 catch-all ─────────────────────────────────────────
 app.use('/api/*', (_req, res) => {
   res.status(404).json({ error: 'Endpoint not found' });
 });
+
 
 // ════════════════════════════════════════════════════════
 // START SERVER

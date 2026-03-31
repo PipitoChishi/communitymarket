@@ -412,11 +412,25 @@ function renderProducts() {
     const catInfo = CATEGORIES.find(c => c.id === p.category) || { emoji:'📦', label:p.category };
     const chCls   = ch.direction === 'up' ? 'up' : ch.direction === 'down' ? 'down' : 'flat';
     const arrow   = ch.direction === 'up' ? '▲' : ch.direction === 'down' ? '▼' : '–';
+    const isSeller = p.reporter_role === 'seller';
+    const sellerBadge = isSeller
+      ? `<span class="pc-seller-badge">\uD83C\uDFEA ${escHtml(p.reporter_shop || 'Verified Seller')}</span>`
+      : '';
+    const ratingRow = isSeller && p.reporter_id
+      ? `<div style="margin-top:6px;display:flex;align-items:center;gap:6px;">
+           <span class="pc-stars" id="stars-${p.id}"><span style="color:var(--text3);font-size:0.72rem;">Loading...</span></span>
+           <button class="pc-rating-btn" onclick="event.stopPropagation();openRatingModal(${p.reporter_id},'${escHtml(p.reporter)}','${escHtml(p.reporter_shop||'')}')">Rate seller</button>
+         </div>`
+      : '';
     return `
     <div class="product-card" id="product-${p.id}" onclick="showProductDetail(${p.id})">
-      <div class="pc-category-badge">${catInfo.emoji} ${catInfo.label}</div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+        <div class="pc-category-badge">${catInfo.emoji} ${catInfo.label}</div>
+        ${sellerBadge}
+      </div>
       <div class="pc-name">${p.name}</div>
-      <div class="pc-location">📍 ${p.store}, ${p.city}</div>
+      <div class="pc-location">\uD83D\uDCCD ${p.store}, ${p.city}</div>
+      ${ratingRow}
       <div class="pc-price-row">
         <div class="pc-price">${priceDisplay(p)}</div>
         <div class="pc-unit">${p.unit}</div>
@@ -424,12 +438,17 @@ function renderProducts() {
       </div>
       <div class="pc-sparkline">${sparklineSVG(p)}</div>
       <div class="pc-meta">
-        <span>${p.verified ? '<span class="pc-verified">✓ Verified</span>' : '⏳ Unverified'}</span>
-        <span>👤 ${p.reporter}</span>
-        <span>🕐 ${p.time}</span>
+        <span>${p.verified ? '<span class="pc-verified">\u2713 Verified</span>' : '\u23F3 Unverified'}</span>
+        <span>\uD83D\uDC64 ${p.reporter}</span>
+        <span>\uD83D\uDD50 ${p.time}</span>
       </div>
     </div>`;
   }).join('');
+
+  // Load inline seller ratings
+  shown.filter(p => p.reporter_role === 'seller' && p.reporter_id).forEach(p => {
+    loadInlineRating(p.reporter_id, p.id);
+  });
 
   const btn = document.getElementById('loadMoreBtn');
   btn.style.display = list.length > visibleCount ? 'inline-flex' : 'none';
@@ -832,3 +851,190 @@ function appLogout() {
   updateNavAuth();
   showToast('👋 Logged out. See you soon!');
 }
+
+// ════════════════════════════════════════════════════════
+// SELLER RATINGS
+// ════════════════════════════════════════════════════════
+
+let activeRatingSellerId = null;
+
+function escHtml(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+async function loadInlineRating(sellerId, productId) {
+  try {
+    const data = await apiFetch(`/sellers/${sellerId}/ratings`);
+    const el = document.getElementById(`stars-${productId}`);
+    if (!el) return;
+    const avg   = data.avg_rating || 0;
+    const total = data.total || 0;
+    if (total === 0) {
+      el.innerHTML = `<span style="color:var(--text3);font-size:0.72rem;">No ratings yet</span>`;
+    } else {
+      const filled = '★'.repeat(Math.round(avg));
+      const empty  = '☆'.repeat(5 - Math.round(avg));
+      el.innerHTML = `${filled}${empty} <span class="star-count">${avg} (${total})</span>`;
+    }
+  } catch (_) {}
+}
+
+async function openRatingModal(sellerId, sellerName, shopName) {
+  activeRatingSellerId = sellerId;
+  document.getElementById('ratingModalTitle').textContent = `⭐ Rate ${sellerName}`;
+  document.getElementById('ratingModalSub').textContent   = shopName ? `🏪 ${shopName}` : '';
+  document.getElementById('ratingValue').value   = '0';
+  document.getElementById('ratingComment').value = '';
+  document.getElementById('ratingError').textContent = '';
+  document.getElementById('starLabel').textContent = 'Click to rate';
+  document.querySelectorAll('.star-btn').forEach(s => s.classList.remove('active'));
+
+  document.getElementById('ratingOverlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+
+  // Load existing ratings
+  try {
+    const data = await apiFetch(`/sellers/${sellerId}/ratings`);
+    buildRatingSummary(data);
+    buildRecentReviews(data.ratings);
+  } catch (_) {
+    document.getElementById('ratingSummary').innerHTML   = '';
+    document.getElementById('recentReviews').innerHTML   = '';
+  }
+
+  // Wire star hover/click
+  const stars = document.querySelectorAll('.star-btn');
+  stars.forEach(star => {
+    const v = parseInt(star.dataset.v);
+    star.onmouseenter = () => stars.forEach(s =>
+      parseInt(s.dataset.v) <= v ? s.classList.add('active') : s.classList.remove('active')
+    );
+    star.onmouseleave = () => {
+      const cur = parseInt(document.getElementById('ratingValue').value) || 0;
+      stars.forEach(s =>
+        parseInt(s.dataset.v) <= cur ? s.classList.add('active') : s.classList.remove('active')
+      );
+    };
+    star.onclick = () => {
+      document.getElementById('ratingValue').value = v;
+      const labels = ['','Poor','Fair','Good','Great','Excellent'];
+      document.getElementById('starLabel').textContent = labels[v];
+      stars.forEach(s =>
+        parseInt(s.dataset.v) <= v ? s.classList.add('active') : s.classList.remove('active')
+      );
+    };
+  });
+}
+
+function buildRatingSummary(data) {
+  const avg   = data.avg_rating || 0;
+  const total = data.total || 0;
+  const el    = document.getElementById('ratingSummary');
+  if (total === 0) {
+    el.innerHTML = `<p style="color:var(--text3);font-size:0.88rem;">No ratings yet — be the first to rate!</p>`;
+    return;
+  }
+  const stars5 = '★'.repeat(Math.round(avg)) + '☆'.repeat(5 - Math.round(avg));
+  const dist   = data.distribution || [];
+  const bars   = [5,4,3,2,1].map(n => {
+    const found = dist.find(d => d.rating === n);
+    const count = found ? found.count : 0;
+    const pct   = total > 0 ? Math.round((count / total) * 100) : 0;
+    return `<div class="rs-bar-row">
+      <span style="width:8px;text-align:right;">${n}</span>
+      <span style="color:#fbbf24;font-size:0.8rem;">★</span>
+      <div class="rs-bar-track"><div class="rs-bar-fill" style="width:${pct}%"></div></div>
+      <span style="width:26px;">${count}</span>
+    </div>`;
+  }).join('');
+  el.innerHTML = `
+    <div style="text-align:center;">
+      <div class="rs-big-num">${avg}</div>
+      <div class="rs-stars">${stars5}</div>
+      <div class="rs-count">${total} rating${total !== 1 ? 's' : ''}</div>
+    </div>
+    <div class="rs-bars">${bars}</div>
+  `;
+}
+
+function buildRecentReviews(ratings) {
+  const el = document.getElementById('recentReviews');
+  if (!ratings || ratings.length === 0) { el.innerHTML = ''; return; }
+  el.innerHTML =
+    `<p style="font-weight:600;font-size:0.85rem;margin-bottom:8px;color:var(--text2);">Recent Reviews</p>` +
+    ratings.slice(0,5).map(r => {
+      const stars = '★'.repeat(r.rating) + '☆'.repeat(5 - r.rating);
+      const date  = new Date(r.created_at).toLocaleDateString('en-IN', { day:'numeric', month:'short' });
+      return `<div class="review-item">
+        <div class="review-header">
+          <span class="review-name">👤 ${escHtml(r.rater_name)}</span>
+          <span class="review-stars">${stars}</span>
+        </div>
+        ${r.comment ? `<div class="review-comment">"${escHtml(r.comment)}"</div>` : ''}
+        <div class="review-date">${date}</div>
+      </div>`;
+    }).join('');
+}
+
+function closeRatingModal() {
+  const ov = document.getElementById('ratingOverlay');
+  if (ov) ov.classList.remove('open');
+  document.body.style.overflow = '';
+  activeRatingSellerId = null;
+}
+
+function handleRatingOverlayClick(e) {
+  if (e.target === document.getElementById('ratingOverlay')) closeRatingModal();
+}
+
+async function submitSellerRating() {
+  const rating = parseInt(document.getElementById('ratingValue').value);
+  const errEl  = document.getElementById('ratingError');
+  errEl.textContent = '';
+
+  if (!rating || rating < 1) {
+    errEl.textContent = 'Please select a star rating first.';
+    return;
+  }
+  if (!activeRatingSellerId) return;
+
+  const btn = document.getElementById('submitRatingBtn');
+  btn.disabled = true; btn.textContent = 'Submitting…';
+
+  try {
+    const comment = document.getElementById('ratingComment').value.trim();
+    const headers = { 'Content-Type': 'application/json' };
+    if (currentToken) headers['Authorization'] = `Bearer ${currentToken}`;
+
+    const res = await fetch(`${API}/sellers/${activeRatingSellerId}/rate`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        rating,
+        comment,
+        rater_name: currentUser ? currentUser.name : 'Anonymous',
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Rating failed');
+
+    const sid = activeRatingSellerId;
+    closeRatingModal();
+    showToast(`⭐ Rating submitted! ${data.avg_rating}/5 (${data.total} total)`);
+
+    // Refresh inline stars for cards from this seller
+    document.querySelectorAll('[id^="stars-"]').forEach(el => {
+      const productCard = el.closest('.product-card');
+      if (productCard) {
+        const pid = parseInt(productCard.id.replace('product-', ''));
+        const prod = allProducts.find(p => p.id === pid);
+        if (prod && prod.reporter_id === sid) loadInlineRating(sid, pid);
+      }
+    });
+  } catch (err) {
+    errEl.textContent = err.message;
+  } finally {
+    btn.disabled = false; btn.textContent = 'Submit Rating ★';
+  }
+}
+

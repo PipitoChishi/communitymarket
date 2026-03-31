@@ -397,8 +397,56 @@
     </div>
   </div>
 
+  <!-- ───────── RATING MODAL ───────── -->
+  <div class="modal-overlay" id="ratingOverlay" onclick="handleRatingOverlayClick(event)">
+    <div class="modal rating-modal" id="ratingModal">
+      <div class="modal-header">
+        <div>
+          <h2 id="ratingModalTitle">⭐ Rate Seller</h2>
+          <p id="ratingModalSub" style="font-size:0.82rem;color:var(--text3);margin-top:4px;"></p>
+        </div>
+        <button class="modal-close" onclick="closeRatingModal()">✕</button>
+      </div>
+      <div class="modal-body">
+
+        <!-- Existing ratings summary -->
+        <div id="ratingSummary" class="rating-summary"></div>
+
+        <!-- Star input -->
+        <div class="star-rating-input" id="starInput">
+          <p style="font-size:0.9rem;color:var(--text2);margin-bottom:10px;">Your Rating</p>
+          <div class="stars-row" id="starsRow">
+            <span class="star-btn" data-v="1">★</span>
+            <span class="star-btn" data-v="2">★</span>
+            <span class="star-btn" data-v="3">★</span>
+            <span class="star-btn" data-v="4">★</span>
+            <span class="star-btn" data-v="5">★</span>
+          </div>
+          <p id="starLabel" class="star-label">Click to rate</p>
+        </div>
+        <input type="hidden" id="ratingValue" value="0" />
+
+        <div class="form-group" style="margin-top:12px;">
+          <label for="ratingComment">Comment (optional)</label>
+          <textarea id="ratingComment" placeholder="Share your experience with this seller…" rows="3"></textarea>
+        </div>
+
+        <div class="auth-error" id="ratingError"></div>
+
+        <!-- Recent reviews -->
+        <div id="recentReviews" class="recent-reviews"></div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn-ghost" onclick="closeRatingModal()">Cancel</button>
+          <button type="button" class="btn-primary" id="submitRatingBtn" onclick="submitSellerRating()">Submit Rating ★</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ───────── SCRIPTS ───────── -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
+
