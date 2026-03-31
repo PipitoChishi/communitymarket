@@ -566,6 +566,95 @@ app.post('/api/sellers/:id/rate', (req, res) => {
   }
 });
 
+// ── GET /api/seller/dashboard ────────────── (auth required)
+app.get('/api/seller/dashboard', authMiddleware, (req, res) => {
+  try {
+    if (req.user.role !== 'seller') return res.status(403).json({ error: 'Seller accounts only' });
+
+    const seller = queryOne(
+      'SELECT id, name, shop_name, shop_category, city, phone, created_at FROM users WHERE id = ?',
+      [req.user.id]
+    );
+
+    const products = query(
+      `SELECT id, name, category, price, prev_price, unit, store, city, note, verified, created_at
+       FROM price_reports WHERE reporter_id = ? ORDER BY created_at DESC`,
+      [req.user.id]
+    ).map(p => ({ ...p, pctChange: pctChange(p.price, p.prev_price), time: relativeTime(p.created_at) }));
+
+    const ratingStats = queryOne(
+      'SELECT ROUND(AVG(rating),1) AS avg_rating, COUNT(*) AS total FROM seller_ratings WHERE seller_id = ?',
+      [req.user.id]
+    );
+
+    const recentReviews = query(
+      'SELECT rater_name, rating, comment, created_at FROM seller_ratings WHERE seller_id = ? ORDER BY created_at DESC LIMIT 5',
+      [req.user.id]
+    );
+
+    res.json({
+      seller,
+      products,
+      avg_rating:   ratingStats?.avg_rating || 0,
+      rating_count: ratingStats?.total       || 0,
+      reviews: recentReviews,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to load dashboard' });
+  }
+});
+
+// ── PATCH /api/products/:id ─────────────── (auth required, own products)
+app.patch('/api/products/:id', authMiddleware, (req, res) => {
+  try {
+    const id  = parseInt(req.params.id);
+    const own = queryOne('SELECT id, reporter_id FROM price_reports WHERE id = ?', [id]);
+    if (!own) return res.status(404).json({ error: 'Product not found' });
+    if (own.reporter_id !== req.user.id) return res.status(403).json({ error: 'You can only edit your own listings' });
+
+    const { price, unit, note, name, category } = req.body;
+    const current = queryOne('SELECT * FROM price_reports WHERE id = ?', [id]);
+
+    const newPrice = price !== undefined ? parseFloat(price) : current.price;
+    if (isNaN(newPrice) || newPrice <= 0) return res.status(400).json({ error: 'Invalid price' });
+
+    run(
+      `UPDATE price_reports
+       SET prev_price = price,
+           price    = ?,
+           unit     = COALESCE(?,unit),
+           note     = COALESCE(?,note),
+           name     = COALESCE(?,name),
+           category = COALESCE(?,category)
+       WHERE id = ?`,
+      [newPrice, unit || null, note || null, name || null, category || null, id]
+    );
+
+    const updated = queryOne('SELECT * FROM price_reports WHERE id = ?', [id]);
+    res.json({ ...updated, pctChange: pctChange(updated.price, updated.prev_price) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update product' });
+  }
+});
+
+// ── DELETE /api/products/:id ──────────────  (auth required, own products)
+app.delete('/api/products/:id', authMiddleware, (req, res) => {
+  try {
+    const id  = parseInt(req.params.id);
+    const own = queryOne('SELECT id, reporter_id FROM price_reports WHERE id = ?', [id]);
+    if (!own) return res.status(404).json({ error: 'Product not found' });
+    if (own.reporter_id !== req.user.id) return res.status(403).json({ error: 'You can only delete your own listings' });
+
+    run('DELETE FROM price_reports WHERE id = ?', [id]);
+    res.json({ success: true, deleted: id });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete product' });
+  }
+});
+
 // ── 404 catch-all ─────────────────────────────────────────
 app.use('/api/*', (_req, res) => {
   res.status(404).json({ error: 'Endpoint not found' });

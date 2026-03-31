@@ -32,6 +32,7 @@
         </div>
         <div id="navAuthUser" style="display:none;">
           <div class="nav-user-info" id="navUserInfo"></div>
+          <button class="btn-ghost" id="sellerDashBtn" style="display:none;" onclick="openSellerDashboard()">🏪 My Dashboard</button>
           <button class="btn-ghost" onclick="appLogout()">Logout</button>
           <button class="btn-primary" id="openSubmitModal">+ Report Price</button>
         </div>
@@ -439,6 +440,125 @@
         <div class="modal-actions">
           <button type="button" class="btn-ghost" onclick="closeRatingModal()">Cancel</button>
           <button type="button" class="btn-primary" id="submitRatingBtn" onclick="submitSellerRating()">Submit Rating ★</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────── SELLER DASHBOARD MODAL ───────── -->
+  <div class="sd-overlay" id="sdOverlay" onclick="handleSdOverlay(event)">
+    <div class="sd-panel" id="sdPanel">
+
+      <!-- Header -->
+      <div class="sd-header">
+        <div class="sd-header-left">
+          <span class="sd-shop-icon">🏪</span>
+          <div>
+            <h2 id="sdShopName">My Shop</h2>
+            <p id="sdShopMeta" style="font-size:0.82rem;color:var(--text3);"></p>
+          </div>
+        </div>
+        <div class="sd-header-actions">
+          <button class="btn-primary" onclick="openModal();" style="gap:6px;">+ Add Product</button>
+          <button class="sd-close" onclick="closeSellerDashboard()">✕</button>
+        </div>
+      </div>
+
+      <div class="sd-body">
+        <!-- Left sidebar: stats + ratings -->
+        <aside class="sd-sidebar">
+          <div class="sd-stat-card">
+            <div class="sd-stat-num" id="sdTotalProducts">–</div>
+            <div class="sd-stat-lbl">Active Listings</div>
+          </div>
+          <div class="sd-stat-card">
+            <div class="sd-stat-num" id="sdAvgRating">–</div>
+            <div class="sd-stat-lbl">Avg Customer Rating</div>
+          </div>
+          <div class="sd-stat-card">
+            <div class="sd-stat-num" id="sdRatingCount">–</div>
+            <div class="sd-stat-lbl">Total Reviews</div>
+          </div>
+
+          <!-- Recent reviews -->
+          <div class="sd-reviews" id="sdReviews">
+            <p class="sd-section-title">Recent Reviews</p>
+            <div id="sdReviewList"></div>
+          </div>
+        </aside>
+
+        <!-- Main: product table -->
+        <main class="sd-main">
+          <div class="sd-table-header">
+            <p class="sd-section-title">Your Listings</p>
+            <div class="sd-search-wrap">
+              <span>🔍</span>
+              <input type="text" id="sdSearch" placeholder="Search listings…" oninput="filterSdProducts()" />
+            </div>
+          </div>
+
+          <div id="sdProductsWrap">
+            <div id="sdLoadingMsg" style="text-align:center;padding:40px;color:var(--text3);">Loading your listings…</div>
+          </div>
+        </main>
+      </div>
+    </div>
+  </div>
+
+  <!-- inline edit modal for price -->
+  <div class="modal-overlay" id="editProductOverlay" onclick="handleEditOverlay(event)">
+    <div class="modal" id="editProductModal" style="max-width:460px;">
+      <div class="modal-header">
+        <h2>✏️ Edit Listing</h2>
+        <button class="modal-close" onclick="closeEditProduct()">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="editProductId" />
+        <div class="form-row">
+          <div class="form-group">
+            <label for="editName">Product Name</label>
+            <input type="text" id="editName" />
+          </div>
+          <div class="form-group">
+            <label for="editCategory">Category</label>
+            <select id="editCategory">
+              <option value="groceries">🛒 Groceries</option>
+              <option value="vegetables">🥦 Vegetables</option>
+              <option value="fuel">⛽ Fuel</option>
+              <option value="electronics">💻 Electronics</option>
+              <option value="clothing">👕 Clothing</option>
+              <option value="medicine">💊 Medicine</option>
+              <option value="transport">🚗 Transport</option>
+              <option value="housing">🏠 Housing</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="editPrice">Price (₹) *</label>
+            <input type="number" id="editPrice" min="0" step="0.01" />
+          </div>
+          <div class="form-group">
+            <label for="editUnit">Unit</label>
+            <select id="editUnit">
+              <option value="per kg">per kg</option>
+              <option value="per litre">per litre</option>
+              <option value="per piece">per piece</option>
+              <option value="per dozen">per dozen</option>
+              <option value="per pack">per pack</option>
+              <option value="per month">per month</option>
+              <option value="per trip">per trip</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="editNote">Notes</label>
+          <textarea id="editNote" rows="2" placeholder="Brand, quality grade, etc."></textarea>
+        </div>
+        <div class="auth-error" id="editError"></div>
+        <div class="modal-actions">
+          <button class="btn-ghost" onclick="closeEditProduct()">Cancel</button>
+          <button class="btn-primary" onclick="saveEditProduct()">Save Changes ✓</button>
         </div>
       </div>
     </div>

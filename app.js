@@ -708,23 +708,27 @@ function hexToRgba(hex, alpha) {
 // ════════════════════════════════════════════════════════
 
 function updateNavAuth() {
-  const guest = document.getElementById('navAuthGuest');
-  const user  = document.getElementById('navAuthUser');
-  const info  = document.getElementById('navUserInfo');
-  if (!guest || !user) return;
+  const guest    = document.getElementById('navAuthGuest');
+  const userDiv  = document.getElementById('navAuthUser');
+  const info     = document.getElementById('navUserInfo');
+  const dashBtn  = document.getElementById('sellerDashBtn');
+  if (!guest || !userDiv) return;
   if (currentUser) {
-    guest.style.display = 'none';
-    user.style.display  = 'flex';
+    guest.style.display   = 'none';
+    userDiv.style.display = 'flex';
     const isSeller = currentUser.role === 'seller';
+    if (dashBtn) dashBtn.style.display = isSeller ? 'inline-flex' : 'none';
     info.innerHTML = `
       <span>${currentUser.name}</span>
       ${isSeller
         ? `<span class="nav-seller-badge">🏪 Seller</span>`
-        : `<span class="nav-user-role">Customer</span>`}
+        : `<span class="nav-user-role">Customer</span>`
+      }
     `;
   } else {
-    guest.style.display = 'flex';
-    user.style.display  = 'none';
+    guest.style.display   = 'flex';
+    userDiv.style.display = 'none';
+    if (dashBtn) dashBtn.style.display = 'none';
   }
 }
 
@@ -1038,3 +1042,215 @@ async function submitSellerRating() {
   }
 }
 
+// ════════════════════════════════════════════════════════
+// SELLER DASHBOARD
+// ════════════════════════════════════════════════════════
+
+let sdAllProducts = []; // cached dashboard products
+
+async function openSellerDashboard() {
+  if (!currentUser || currentUser.role !== 'seller') return;
+  document.getElementById('sdOverlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  await loadSellerDashboard();
+}
+
+function closeSellerDashboard() {
+  document.getElementById('sdOverlay').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+function handleSdOverlay(e) {
+  if (e.target === document.getElementById('sdOverlay')) closeSellerDashboard();
+}
+
+async function loadSellerDashboard() {
+  document.getElementById('sdLoadingMsg') && (document.getElementById('sdLoadingMsg').style.display = 'block');
+  try {
+    const res = await fetch(`${API}/seller/dashboard`, {
+      headers: { 'Authorization': `Bearer ${currentToken}` },
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to load');
+
+    sdAllProducts = data.products || [];
+
+    // Header
+    document.getElementById('sdShopName').textContent = data.seller.shop_name || data.seller.name;
+    document.getElementById('sdShopMeta').textContent =
+      `${data.seller.shop_category ? '🏦 ' + data.seller.shop_category : ''} · 📍 ${data.seller.city}`;
+
+    // Stats
+    document.getElementById('sdTotalProducts').textContent = sdAllProducts.length;
+    document.getElementById('sdAvgRating').textContent =
+      data.avg_rating ? `${data.avg_rating} ★` : 'No ratings';
+    document.getElementById('sdRatingCount').textContent = data.rating_count || 0;
+
+    // Reviews
+    const reviewList = document.getElementById('sdReviewList');
+    if (!data.reviews || data.reviews.length === 0) {
+      reviewList.innerHTML = `<p style="color:var(--text3);font-size:0.8rem;">No reviews yet.</p>`;
+    } else {
+      reviewList.innerHTML = data.reviews.map(r => {
+        const stars = '★'.repeat(r.rating) + '☆'.repeat(5 - r.rating);
+        return `<div class="sd-review-item">
+          <div class="sd-review-top">
+            <span class="sd-review-name">${escHtml(r.rater_name)}</span>
+            <span class="sd-review-stars">${stars}</span>
+          </div>
+          ${r.comment ? `<div class="sd-review-comment">“${escHtml(r.comment)}”</div>` : ''}
+        </div>`;
+      }).join('');
+    }
+
+    renderSdProducts(sdAllProducts);
+  } catch (err) {
+    document.getElementById('sdProductsWrap').innerHTML =
+      `<div class="sd-empty"><div class="sd-empty-icon">⚠️</div><p>${err.message}</p></div>`;
+  }
+}
+
+const SD_CAT_LABELS = {
+  groceries:'🛒 Groceries', vegetables:'🥦 Vegetables', fuel:'⛽ Fuel',
+  electronics:'💻 Electronics', clothing:'👕 Clothing',
+  medicine:'💊 Medicine', transport:'🚗 Transport', housing:'🏠 Housing'
+};
+
+function renderSdProducts(products) {
+  const wrap = document.getElementById('sdProductsWrap');
+  if (!products.length) {
+    wrap.innerHTML = `<div class="sd-empty">
+      <div class="sd-empty-icon">📦</div>
+      <p>No listings yet. Click <strong>+ Add Product</strong> to get started!</p>
+    </div>`;
+    return;
+  }
+  const rows = products.map(p => {
+    const cat = SD_CAT_LABELS[p.category] || p.category;
+    const ch  = p.pctChange || { value:0, direction:'flat' };
+    const chHtml = ch.direction === 'up'
+      ? `<span class="sd-change-up">▲${ch.value}%</span>`
+      : ch.direction === 'down'
+      ? `<span class="sd-change-down">▼${ch.value}%</span>`
+      : `<span style="color:var(--text3);font-size:0.75rem;">–</span>`;
+    return `<tr>
+      <td>
+        <div class="sd-product-name">${escHtml(p.name)}</div>
+        <div style="font-size:0.75rem;color:var(--text3);margin-top:2px;">${escHtml(p.note || '')}</div>
+      </td>
+      <td><span class="sd-cat-pill">${cat}</span></td>
+      <td>
+        <span class="sd-price">₹${p.price}</span> <span style="color:var(--text3);font-size:0.78rem;">${p.unit}</span>
+        <div style="margin-top:3px;">${chHtml}</div>
+      </td>
+      <td style="color:var(--text3);font-size:0.78rem;">${p.time}</td>
+      <td>
+        <div class="sd-actions">
+          <button class="sd-btn-edit" onclick="openEditProduct(${p.id})">✏️ Edit</button>
+          <button class="sd-btn-del" onclick="deleteSdProduct(${p.id})">🗑</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  wrap.innerHTML = `<table class="sd-table">
+    <thead><tr>
+      <th>Product</th><th>Category</th><th>Price</th><th>Listed</th><th>Actions</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+function filterSdProducts() {
+  const q = document.getElementById('sdSearch').value.toLowerCase();
+  const filtered = q
+    ? sdAllProducts.filter(p =>
+        p.name.toLowerCase().includes(q) ||
+        (p.category || '').toLowerCase().includes(q) ||
+        (p.note || '').toLowerCase().includes(q)
+      )
+    : sdAllProducts;
+  renderSdProducts(filtered);
+}
+
+// ────────────────────────────────────────────────────────
+// Edit product modal
+// ────────────────────────────────────────────────────────
+function openEditProduct(id) {
+  const p = sdAllProducts.find(x => x.id === id);
+  if (!p) return;
+  document.getElementById('editProductId').value   = id;
+  document.getElementById('editName').value        = p.name;
+  document.getElementById('editCategory').value    = p.category;
+  document.getElementById('editPrice').value       = p.price;
+  document.getElementById('editUnit').value        = p.unit || 'per kg';
+  document.getElementById('editNote').value        = p.note || '';
+  document.getElementById('editError').textContent = '';
+  document.getElementById('editProductOverlay').classList.add('open');
+}
+
+function closeEditProduct() {
+  document.getElementById('editProductOverlay').classList.remove('open');
+}
+
+function handleEditOverlay(e) {
+  if (e.target === document.getElementById('editProductOverlay')) closeEditProduct();
+}
+
+async function saveEditProduct() {
+  const id    = parseInt(document.getElementById('editProductId').value);
+  const price = parseFloat(document.getElementById('editPrice').value);
+  const errEl = document.getElementById('editError');
+  errEl.textContent = '';
+
+  if (!price || price <= 0) { errEl.textContent = 'Please enter a valid price.'; return; }
+
+  const btn = document.querySelector('#editProductModal .btn-primary');
+  btn.disabled = true; btn.textContent = 'Saving…';
+
+  try {
+    const res = await fetch(`${API}/products/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${currentToken}` },
+      body: JSON.stringify({
+        name:     document.getElementById('editName').value.trim(),
+        category: document.getElementById('editCategory').value,
+        price,
+        unit:     document.getElementById('editUnit').value,
+        note:     document.getElementById('editNote').value.trim(),
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Update failed');
+
+    closeEditProduct();
+    showToast(`✅ "${data.name}" updated to ₹${data.price}!`);
+    await loadSellerDashboard(); // refresh table
+    await loadProducts();        // refresh public products grid
+  } catch (err) {
+    errEl.textContent = err.message;
+  } finally {
+    btn.disabled = false; btn.textContent = 'Save Changes ✓';
+  }
+}
+
+async function deleteSdProduct(id) {
+  const p = sdAllProducts.find(x => x.id === id);
+  if (!p) return;
+  if (!confirm(`Delete "${p.name}" from your listings? This cannot be undone.`)) return;
+
+  try {
+    const res = await fetch(`${API}/products/${id}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${currentToken}` },
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Delete failed');
+
+    showToast(`🗑 "${p.name}" removed from your listings.`);
+    await loadSellerDashboard();
+    await loadProducts();
+  } catch (err) {
+    showToast(`❌ ${err.message}`);
+  }
+}
