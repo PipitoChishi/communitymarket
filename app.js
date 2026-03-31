@@ -23,6 +23,10 @@ let sortMode       = 'recent';
 let visibleCount   = 9;
 let allProducts    = [];   // cached from last fetch
 let priceChart     = null; // Chart.js instance
+let detailChart    = null; // detail modal chart
+
+// ── CART STATE ──
+let cart = JSON.parse(localStorage.getItem('cm_cart') || '[]');
 
 // ────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -51,6 +55,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupSort();
   setupChartTabs();
   setupLoadMore();
+  updateCartBadge();
 
   // Wire submit modal button
   const submitBtn = document.getElementById('openSubmitModal');
@@ -427,9 +432,12 @@ function renderProducts() {
     const noteRow = p.note
       ? `<div class="pc-note">\uD83D\uDCDD ${escHtml(p.note)}</div>`
       : '';
-    const isOwner = currentUser && p.reporter_id && currentUser.id === p.reporter_id;
+    const isOwner = currentUser && currentUser.role === 'seller' && p.reporter_id && currentUser.id === p.reporter_id;
     const editBtn = isOwner
-      ? `<button class="pc-edit-btn" onclick="event.stopPropagation();openEditProduct(${p.id})">✏️ Edit</button>`
+      ? `<button class="pc-edit-btn" onclick="event.stopPropagation();openEditProduct(${p.id})">\u270f\ufe0f Edit</button>`
+      : '';
+    const prevPriceHtml = p.prev_price && p.prev_price !== p.price
+      ? `<div class="pc-prev-price">\u20b9${p.prev_price}</div>`
       : '';
     return `
     <div class="product-card" id="product-${p.id}" onclick="showProductDetail(${p.id})">
@@ -443,6 +451,7 @@ function renderProducts() {
       ${noteRow}
       ${ratingRow}
       <div class="pc-price-row">
+        ${prevPriceHtml}
         <div class="pc-price">${priceDisplay(p)}</div>
         <div class="pc-unit">${p.unit}</div>
         <div class="pc-change ${chCls}">${arrow} ${ch.value}%</div>
@@ -451,7 +460,7 @@ function renderProducts() {
       <div class="pc-meta">
         <span>${p.verified ? '<span class="pc-verified">\u2713 Verified</span>' : '\u23F3 Unverified'}</span>
         <span>\uD83D\uDC64 ${p.reporter}</span>
-        <span>\uD83D\uDD50 ${p.time}</span>
+        <button class="pc-cart-btn" onclick="event.stopPropagation();addToCart(${p.id})">\uD83D\uDED2 Add to Cart</button>
       </div>
     </div>`;
   }).join('');
@@ -465,10 +474,149 @@ function renderProducts() {
   btn.style.display = list.length > visibleCount ? 'inline-flex' : 'none';
 }
 
-function showProductDetail(id) {
+async function showProductDetail(id) {
   const p = allProducts.find(x => x.id === id);
   if (!p) return;
-  showToast(`📊 ${p.name} – ₹${p.price} ${p.unit} at ${p.store}, ${p.city}`);
+
+  const catInfo = CATEGORIES.find(c => c.id === p.category) || { emoji:'\uD83D\uDCE6', label:p.category };
+  document.getElementById('detailTitle').textContent = p.name;
+  document.getElementById('detailSub').textContent = `${catInfo.emoji} ${catInfo.label} \u00b7 \uD83D\uDCCD ${p.store}, ${p.city}`;
+
+  const ch = p.pctChange || { value:0, direction:'flat' };
+  const chCls = ch.direction === 'up' ? 'up' : 'down';
+  const arrow = ch.direction === 'up' ? '\u25b2' : ch.direction === 'down' ? '\u25bc' : '\u2013';
+  document.getElementById('detailPrices').innerHTML = `
+    <div class="detail-price-card">
+      <div class="detail-price-label">Current Price</div>
+      <div class="detail-price-value current">\u20b9${p.price}</div>
+      <div class="detail-change-pill ${chCls}">${arrow} ${ch.value}%</div>
+    </div>
+    <div class="detail-price-card">
+      <div class="detail-price-label">Previous Price</div>
+      <div class="detail-price-value previous">${p.prev_price ? '\u20b9' + p.prev_price : '\u2013'}</div>
+      <div style="font-size:0.78rem;color:var(--text3);margin-top:6px;">${p.unit}</div>
+    </div>
+  `;
+
+  document.getElementById('detailInfo').innerHTML = `
+    <div class="detail-info-item"><div class="detail-info-label">Store</div>${escHtml(p.store)}</div>
+    <div class="detail-info-item"><div class="detail-info-label">City</div>${escHtml(p.city)}</div>
+    <div class="detail-info-item"><div class="detail-info-label">Reporter</div>${escHtml(p.reporter)}</div>
+    <div class="detail-info-item"><div class="detail-info-label">Status</div>${p.verified ? '\u2713 Verified' : '\u23f3 Unverified'}</div>
+    ${p.note ? `<div class="detail-info-item" style="grid-column:1/-1;"><div class="detail-info-label">Notes</div>${escHtml(p.note)}</div>` : ''}
+  `;
+
+  document.getElementById('detailActions').innerHTML = `
+    <button class="btn-primary" onclick="addToCart(${p.id});closeDetailModal()">\uD83D\uDED2 Add to Cart</button>
+    <button class="btn-outline" onclick="closeDetailModal()">Close</button>
+  `;
+
+  document.getElementById('detailOverlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+
+  document.getElementById('detailChartLegend').innerHTML = '<span style="color:var(--text3)">Loading chart...</span>';
+  try {
+    const histData = await apiFetch(`/products/${id}/history`);
+    renderDetailChart(histData, p);
+  } catch (e) {
+    document.getElementById('detailChartLegend').innerHTML = '<span style="color:var(--text3)">No price history available</span>';
+  }
+}
+
+function renderDetailChart(histData, product) {
+  const ctx = document.getElementById('detailChart');
+  if (!ctx) return;
+  const context = ctx.getContext('2d');
+
+  const points = histData.points;
+  if (!points || points.length === 0) {
+    document.getElementById('detailChartLegend').innerHTML = '<span style="color:var(--text3)">No price history yet</span>';
+    return;
+  }
+
+  const labels = points.map(pt => {
+    const d = new Date(pt.date);
+    return d.toLocaleDateString('en-IN', { day:'numeric', month:'short' });
+  });
+  const prices = points.map(pt => pt.price);
+  const color = '#7c6bff';
+
+  const gradient = context.createLinearGradient(0, 0, 0, 220);
+  gradient.addColorStop(0, 'rgba(124,107,255,0.3)');
+  gradient.addColorStop(1, 'rgba(124,107,255,0)');
+
+  if (detailChart) detailChart.destroy();
+  detailChart = new Chart(context, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: product.name,
+        data: prices,
+        borderColor: color,
+        backgroundColor: gradient,
+        fill: true,
+        tension: 0.4,
+        pointRadius: 4,
+        pointHoverRadius: 8,
+        pointBackgroundColor: color,
+        pointBorderColor: '#fff',
+        pointBorderWidth: 2,
+        borderWidth: 2.5,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      aspectRatio: 2.5,
+      interaction: { intersect: false, mode: 'index' },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(17,20,34,0.95)',
+          borderColor: 'rgba(255,255,255,0.1)',
+          borderWidth: 1,
+          padding: 12,
+          titleColor: '#9ba3c7',
+          bodyColor: '#e8eaf6',
+          callbacks: { label: ctx => ` \u20b9${ctx.parsed.y}` },
+        },
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(255,255,255,0.04)', drawBorder: false },
+          ticks: { color: '#5b6494', font: { size: 10 } },
+        },
+        y: {
+          grid: { color: 'rgba(255,255,255,0.04)', drawBorder: false },
+          ticks: { color: '#5b6494', font: { size: 10 }, callback: v => '\u20b9' + v },
+        },
+      },
+    },
+  });
+
+  const max = Math.max(...prices), min = Math.min(...prices);
+  const cur = prices[prices.length - 1];
+  const first = prices[0];
+  const trend = first > 0 ? (((cur - first) / first) * 100).toFixed(1) : 0;
+  const up = trend >= 0;
+  document.getElementById('detailChartLegend').innerHTML = `
+    <span>\uD83D\uDCCD Current: <strong>\u20b9${cur}</strong></span>
+    <span>\uD83D\uDCC8 High: <strong>\u20b9${max}</strong></span>
+    <span>\uD83D\uDCC9 Low: <strong>\u20b9${min}</strong></span>
+    <span>Trend: <strong style="color:${up ? '#fb7185' : '#34d399'}">${up ? '\u25b2' : '\u25bc'} ${Math.abs(trend)}%</strong></span>
+    <span>${points.length} report${points.length !== 1 ? 's' : ''}</span>
+  `;
+}
+
+function closeDetailModal() {
+  document.getElementById('detailOverlay').classList.remove('open');
+  document.body.style.overflow = '';
+  if (detailChart) { detailChart.destroy(); detailChart = null; }
+}
+
+function handleDetailOverlay(e) {
+  if (e.target === document.getElementById('detailOverlay')) closeDetailModal();
 }
 
 function setupSearch() {
@@ -607,7 +755,13 @@ function handleOverlayClick(e) {
 
 // openModal and modalClose wired in DOMContentLoaded above
 document.getElementById('modalClose').addEventListener('click', closeModal);
-document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModal(); closeAuthModal(); } });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    closeModal(); closeAuthModal(); closeDetailModal();
+    const cartOv = document.getElementById('cartOverlay');
+    if (cartOv && cartOv.classList.contains('open')) toggleCart();
+  }
+});
 
 // ────────────────────────────────────────────────────────────
 // SUBMIT PRICE
@@ -1346,3 +1500,133 @@ async function submitSdAddProduct() {
   }
 }
 
+// ════════════════════════════════════════════════════════
+// CART SYSTEM
+// ════════════════════════════════════════════════════════
+
+function saveCart() {
+  localStorage.setItem('cm_cart', JSON.stringify(cart));
+  updateCartBadge();
+  renderCartItems();
+}
+
+function updateCartBadge() {
+  const badge = document.getElementById('cartBadge');
+  if (!badge) return;
+  const total = cart.reduce((s, item) => s + item.qty, 0);
+  badge.textContent = total;
+  badge.classList.remove('pulse');
+  void badge.offsetWidth; // reflow
+  if (total > 0) badge.classList.add('pulse');
+}
+
+function addToCart(productId) {
+  const p = allProducts.find(x => x.id === productId);
+  if (!p) return;
+
+  const existing = cart.find(item => item.id === productId);
+  if (existing) {
+    existing.qty++;
+  } else {
+    cart.push({
+      id: p.id,
+      name: p.name,
+      price: p.price,
+      unit: p.unit,
+      store: p.store,
+      city: p.city,
+      category: p.category,
+      qty: 1,
+    });
+  }
+  saveCart();
+  showToast(`🛒 ${p.name} added to cart!`);
+}
+
+function removeFromCart(productId) {
+  cart = cart.filter(item => item.id !== productId);
+  saveCart();
+}
+
+function updateCartQty(productId, delta) {
+  const item = cart.find(x => x.id === productId);
+  if (!item) return;
+  item.qty += delta;
+  if (item.qty <= 0) {
+    cart = cart.filter(x => x.id !== productId);
+  }
+  saveCart();
+}
+
+function toggleCart() {
+  const overlay = document.getElementById('cartOverlay');
+  overlay.classList.toggle('open');
+  if (overlay.classList.contains('open')) {
+    document.body.style.overflow = 'hidden';
+    renderCartItems();
+  } else {
+    document.body.style.overflow = '';
+  }
+}
+
+function handleCartOverlay(e) {
+  if (e.target === document.getElementById('cartOverlay')) toggleCart();
+}
+
+function renderCartItems() {
+  const container = document.getElementById('cartItems');
+  const footer = document.getElementById('cartFooter');
+  if (!container) return;
+
+  if (cart.length === 0) {
+    container.innerHTML = `
+      <div class="cart-empty">
+        <div class="cart-empty-icon">🛒</div>
+        <p>Your cart is empty</p>
+        <p style="font-size:0.82rem;margin-top:8px;">Browse products and add items to get started!</p>
+      </div>`;
+    footer.style.display = 'none';
+    return;
+  }
+
+  footer.style.display = '';
+  const CAT_EMOJI = {
+    groceries:'🛒', vegetables:'🥦', fuel:'⛽',
+    electronics:'💻', clothing:'👕', medicine:'💊',
+    transport:'🚗', housing:'🏠'
+  };
+
+  container.innerHTML = cart.map(item => `
+    <div class="cart-item">
+      <div class="cart-item-info">
+        <div class="cart-item-name">${CAT_EMOJI[item.category] || '📦'} ${escHtml(item.name)}</div>
+        <div class="cart-item-meta">📍 ${escHtml(item.store)}, ${escHtml(item.city)} · ${item.unit}</div>
+        <div class="cart-item-qty">
+          <button class="cart-qty-btn" onclick="updateCartQty(${item.id},-1)">−</button>
+          <span class="cart-qty-num">${item.qty}</span>
+          <button class="cart-qty-btn" onclick="updateCartQty(${item.id},1)">+</button>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
+        <div class="cart-item-price">₹${(item.price * item.qty).toLocaleString()}</div>
+        <button class="cart-item-remove" onclick="removeFromCart(${item.id})">✕ Remove</button>
+      </div>
+    </div>
+  `).join('');
+
+  const total = cart.reduce((s, item) => s + item.price * item.qty, 0);
+  document.getElementById('cartTotal').textContent = `₹${total.toLocaleString()}`;
+}
+
+function checkoutCart() {
+  if (cart.length === 0) {
+    showToast('🛒 Your cart is empty!');
+    return;
+  }
+  const total = cart.reduce((s, item) => s + item.price * item.qty, 0);
+  const count = cart.reduce((s, item) => s + item.qty, 0);
+  showToast(`🎉 Checkout: ${count} item${count !== 1 ? 's' : ''} · ₹${total.toLocaleString()} — Thank you!`);
+  cart = [];
+  saveCart();
+  toggleCart();
+}

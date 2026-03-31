@@ -251,6 +251,39 @@ app.get('/api/products/:id', (req, res) => {
   }
 });
 
+// ── GET /api/products/:id/history ────────────────────────
+app.get('/api/products/:id/history', (req, res) => {
+  try {
+    const row = queryOne('SELECT name, category FROM price_reports WHERE id = ?', [parseInt(req.params.id)]);
+    if (!row) return res.status(404).json({ error: 'Product not found' });
+
+    // Get all reports for the same product name + category, ordered by date
+    const history = query(
+      `SELECT price, prev_price, store, city, reporter, created_at
+       FROM price_reports
+       WHERE LOWER(name) = LOWER(?) AND category = ?
+       ORDER BY created_at ASC`,
+      [row.name, row.category]
+    );
+
+    res.json({
+      product: row.name,
+      category: row.category,
+      points: history.map(h => ({
+        price: h.price,
+        prev_price: h.prev_price,
+        store: h.store,
+        city: h.city,
+        reporter: h.reporter,
+        date: h.created_at,
+      })),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch product history' });
+  }
+});
+
 // ── POST /api/products ───────────────────────────────────
 app.post('/api/products', (req, res) => {
   try {

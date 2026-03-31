@@ -26,6 +26,9 @@
         <a href="#leaderboard" class="nav-link" id="nav-leaderboard">Leaderboard</a>
       </div>
       <div class="nav-actions">
+        <button class="cart-btn" id="cartNavBtn" onclick="toggleCart()">
+          🛒 <span class="cart-badge" id="cartBadge">0</span>
+        </button>
         <div id="navAuthGuest">
           <button class="btn-ghost" onclick="openAuthModal('login')">Login</button>
           <button class="btn-primary" onclick="openAuthModal('register')">Register</button>
@@ -291,6 +294,49 @@
 
   <!-- ───────── TOAST ───────── -->
   <div id="toast" class="toast"></div>
+
+  <!-- ───────── CART SIDEBAR ───────── -->
+  <div class="cart-overlay" id="cartOverlay" onclick="handleCartOverlay(event)">
+    <aside class="cart-panel" id="cartPanel">
+      <div class="cart-header">
+        <h2>🛒 Your Cart</h2>
+        <button class="modal-close" onclick="toggleCart()">✕</button>
+      </div>
+      <div class="cart-items" id="cartItems"></div>
+      <div class="cart-footer" id="cartFooter">
+        <div class="cart-total">
+          <span>Total</span>
+          <span id="cartTotal">₹0</span>
+        </div>
+        <button class="btn-primary full-width" onclick="checkoutCart()">Checkout →</button>
+      </div>
+    </aside>
+  </div>
+
+  <!-- ───────── PRODUCT DETAIL MODAL ───────── -->
+  <div class="modal-overlay" id="detailOverlay" onclick="handleDetailOverlay(event)">
+    <div class="modal detail-modal" id="detailModal">
+      <div class="modal-header">
+        <div>
+          <h2 id="detailTitle">Product</h2>
+          <p id="detailSub" style="font-size:0.82rem;color:var(--text3);margin-top:4px;"></p>
+        </div>
+        <button class="modal-close" onclick="closeDetailModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="detail-prices" id="detailPrices"></div>
+        <div class="detail-chart-wrap">
+          <h3 style="font-size:0.95rem;font-weight:600;margin-bottom:12px;">📈 Price History</h3>
+          <div class="detail-chart-container">
+            <canvas id="detailChart"></canvas>
+          </div>
+          <div class="detail-chart-legend" id="detailChartLegend"></div>
+        </div>
+        <div class="detail-info" id="detailInfo"></div>
+        <div class="detail-actions" id="detailActions"></div>
+      </div>
+    </div>
+  </div>
 
   <!-- ───────── AUTH MODAL ───────── -->
   <div class="modal-overlay" id="authOverlay" onclick="handleAuthOverlayClick(event)">
