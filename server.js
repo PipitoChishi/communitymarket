@@ -254,6 +254,13 @@ app.get('/api/products/:id', (req, res) => {
 // ── POST /api/products ───────────────────────────────────
 app.post('/api/products', (req, res) => {
   try {
+    // Optional auth extraction
+    const header = req.headers.authorization || '';
+    const token  = header.startsWith('Bearer ') ? header.slice(7) : null;
+    if (token) {
+      try { req.user = jwt.verify(token, JWT_SECRET); } catch (e) {}
+    }
+
     const { name, category, price, unit, store, city, reporter, note } = req.body;
 
     if (!name || !category || price === undefined || price === null) {
@@ -271,7 +278,7 @@ app.post('/api/products', (req, res) => {
     );
     const prev_price = prevRow ? prevRow.price : null;
 
-    const reporterName = (reporter || '').trim() || 'Anonymous';
+    const reporterName = (reporter || req.user?.name || '').trim() || 'Anonymous';
     const storeName    = (store  || '').trim() || 'Unknown Store';
     const cityName     = (city   || '').trim() || 'Unknown City';
     const noteVal      = (note   || '').trim() || null;

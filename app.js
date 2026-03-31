@@ -5,7 +5,9 @@
 
 'use strict';
 
-const API = 'http://localhost:3001/api';
+const API = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? 'http://localhost:3001/api'
+  : `${window.location.origin}/api`;
 
 // ── AUTH STATE ──
 let currentUser  = JSON.parse(localStorage.getItem('cm_user')  || 'null');
@@ -1254,3 +1256,82 @@ async function deleteSdProduct(id) {
     showToast(`❌ ${err.message}`);
   }
 }
+
+// ════════════════════════════════════════════════════════
+// SELLER ADD PRODUCT (dedicated modal above dashboard)
+// ════════════════════════════════════════════════════════
+
+function openSdAddProduct() {
+  if (!currentUser || currentUser.role !== 'seller') return;
+
+  // Auto-fill hidden fields from logged-in seller's profile
+  document.getElementById('sdAddStore').value = currentUser.shop_name || currentUser.name;
+  document.getElementById('sdAddCity').value  = currentUser.city || '';
+
+  // Label under title
+  document.getElementById('sdAddShopLabel').textContent =
+    `🏪 ${currentUser.shop_name || currentUser.name}  ·  📍 ${currentUser.city || ''}`;
+
+  // Reset form
+  document.getElementById('sdAddName').value     = '';
+  document.getElementById('sdAddCategory').value = '';
+  document.getElementById('sdAddPrice').value    = '';
+  document.getElementById('sdAddUnit').value     = 'per kg';
+  document.getElementById('sdAddNote').value     = '';
+  document.getElementById('sdAddError').textContent = '';
+
+  document.getElementById('sdAddOverlay').classList.add('open');
+}
+
+function closeSdAddProduct() {
+  document.getElementById('sdAddOverlay').classList.remove('open');
+}
+
+function handleSdAddOverlay(e) {
+  if (e.target === document.getElementById('sdAddOverlay')) closeSdAddProduct();
+}
+
+async function submitSdAddProduct() {
+  const name     = document.getElementById('sdAddName').value.trim();
+  const category = document.getElementById('sdAddCategory').value;
+  const price    = parseFloat(document.getElementById('sdAddPrice').value);
+  const unit     = document.getElementById('sdAddUnit').value;
+  const note     = document.getElementById('sdAddNote').value.trim();
+  const store    = document.getElementById('sdAddStore').value;
+  const city     = document.getElementById('sdAddCity').value;
+  const errEl    = document.getElementById('sdAddError');
+  errEl.textContent = '';
+
+  // Validation
+  if (!name)           { errEl.textContent = 'Product name is required.'; return; }
+  if (!category)       { errEl.textContent = 'Please select a category.'; return; }
+  if (!price || price <= 0) { errEl.textContent = 'Please enter a valid price greater than 0.'; return; }
+
+  const btn = document.getElementById('sdAddSubmitBtn');
+  btn.disabled = true; btn.textContent = 'Adding…';
+
+  try {
+    const res = await fetch(`${API}/products`, {
+      method: 'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${currentToken}`,
+      },
+      body: JSON.stringify({ name, category, price, unit, store, city, note }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to add product');
+
+    closeSdAddProduct();
+    showToast(`✅ "${data.name}" added at ₹${data.price} — visible to all customers!`);
+
+    // Refresh dashboard listing and public products grid
+    await loadSellerDashboard();
+    await loadProducts();
+  } catch (err) {
+    errEl.textContent = err.message;
+  } finally {
+    btn.disabled = false; btn.textContent = 'Add to Shop ✓';
+  }
+}
+

@@ -459,7 +459,7 @@
           </div>
         </div>
         <div class="sd-header-actions">
-          <button class="btn-primary" onclick="openModal();" style="gap:6px;">+ Add Product</button>
+          <button class="btn-primary" onclick="openSdAddProduct()" style="gap:6px;">+ Add Product</button>
           <button class="sd-close" onclick="closeSellerDashboard()">✕</button>
         </div>
       </div>
@@ -501,6 +501,76 @@
             <div id="sdLoadingMsg" style="text-align:center;padding:40px;color:var(--text3);">Loading your listings…</div>
           </div>
         </main>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────── SELLER ADD PRODUCT MODAL (z above dashboard) ───────── -->
+  <div class="sd-add-overlay" id="sdAddOverlay" onclick="handleSdAddOverlay(event)">
+    <div class="modal" id="sdAddModal" style="max-width:520px;z-index:4001;position:relative;">
+      <div class="modal-header">
+        <div>
+          <h2>📦 Add Product to Your Shop</h2>
+          <p id="sdAddShopLabel" style="font-size:0.82rem;color:var(--text3);margin-top:4px;"></p>
+        </div>
+        <button class="modal-close" onclick="closeSdAddProduct()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="sdAddName">Product Name *</label>
+            <input type="text" id="sdAddName" placeholder="e.g. Basmati Rice, Tomatoes, Wheat Flour" />
+          </div>
+          <div class="form-group">
+            <label for="sdAddCategory">Category *</label>
+            <select id="sdAddCategory">
+              <option value="">— Select —</option>
+              <option value="groceries">🛒 Groceries</option>
+              <option value="vegetables">🥦 Vegetables &amp; Fruits</option>
+              <option value="fuel">⛽ Fuel</option>
+              <option value="electronics">💻 Electronics</option>
+              <option value="clothing">👕 Clothing</option>
+              <option value="medicine">💊 Medicine</option>
+              <option value="transport">🚗 Transport</option>
+              <option value="housing">🏠 Housing</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="sdAddPrice">Your Price (₹) *</label>
+            <input type="number" id="sdAddPrice" placeholder="e.g. 85" min="0" step="0.01" />
+          </div>
+          <div class="form-group">
+            <label for="sdAddUnit">Unit</label>
+            <select id="sdAddUnit">
+              <option value="per kg">per kg</option>
+              <option value="per litre">per litre</option>
+              <option value="per piece">per piece</option>
+              <option value="per dozen">per dozen</option>
+              <option value="per pack">per pack</option>
+              <option value="per month">per month</option>
+              <option value="per trip">per trip</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="sdAddNote">Notes (optional)</label>
+          <input type="text" id="sdAddNote" placeholder="Brand, grade, variant — e.g. Aashirvaad 5kg bag" />
+        </div>
+
+        <!-- Hidden auto-filled fields -->
+        <input type="hidden" id="sdAddStore" />
+        <input type="hidden" id="sdAddCity" />
+
+        <div class="auth-error" id="sdAddError"></div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn-ghost" onclick="closeSdAddProduct()">Cancel</button>
+          <button type="button" class="btn-primary" id="sdAddSubmitBtn" onclick="submitSdAddProduct()">
+            Add to Shop ✓
+          </button>
+        </div>
       </div>
     </div>
   </div>
