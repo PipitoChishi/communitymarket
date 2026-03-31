@@ -424,14 +424,23 @@ function renderProducts() {
            <button class="pc-rating-btn" onclick="event.stopPropagation();openRatingModal(${p.reporter_id},'${escHtml(p.reporter)}','${escHtml(p.reporter_shop||'')}')">Rate seller</button>
          </div>`
       : '';
+    const noteRow = p.note
+      ? `<div class="pc-note">\uD83D\uDCDD ${escHtml(p.note)}</div>`
+      : '';
+    const isOwner = currentUser && p.reporter_id && currentUser.id === p.reporter_id;
+    const editBtn = isOwner
+      ? `<button class="pc-edit-btn" onclick="event.stopPropagation();openEditProduct(${p.id})">✏️ Edit</button>`
+      : '';
     return `
     <div class="product-card" id="product-${p.id}" onclick="showProductDetail(${p.id})">
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
         <div class="pc-category-badge">${catInfo.emoji} ${catInfo.label}</div>
         ${sellerBadge}
+        ${editBtn}
       </div>
       <div class="pc-name">${p.name}</div>
       <div class="pc-location">\uD83D\uDCCD ${p.store}, ${p.city}</div>
+      ${noteRow}
       ${ratingRow}
       <div class="pc-price-row">
         <div class="pc-price">${priceDisplay(p)}</div>
@@ -1179,7 +1188,7 @@ function filterSdProducts() {
 // Edit product modal
 // ────────────────────────────────────────────────────────
 function openEditProduct(id) {
-  const p = sdAllProducts.find(x => x.id === id);
+  const p = sdAllProducts.find(x => x.id === id) || allProducts.find(x => x.id === id);
   if (!p) return;
   document.getElementById('editProductId').value   = id;
   document.getElementById('editName').value        = p.name;
@@ -1227,7 +1236,9 @@ async function saveEditProduct() {
 
     closeEditProduct();
     showToast(`✅ "${data.name}" updated to ₹${data.price}!`);
-    await loadSellerDashboard(); // refresh table
+    if (document.getElementById('sdOverlay').classList.contains('open')) {
+      await loadSellerDashboard(); // refresh dashboard table if open
+    }
     await loadProducts();        // refresh public products grid
   } catch (err) {
     errEl.textContent = err.message;

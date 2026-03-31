@@ -649,6 +649,27 @@ input, select, textarea { font-family:inherit; }
   padding:2px 8px; border-radius:99px;
 }
 
+/* Seller note on product cards */
+.pc-note {
+  font-size:0.8rem; color:var(--text2);
+  background:rgba(124,107,255,0.06);
+  border:1px solid rgba(124,107,255,0.12);
+  border-radius:var(--radius-sm);
+  padding:6px 10px; margin:8px 0 4px;
+  line-height:1.4;
+}
+
+/* Edit button on product cards (for owner) */
+.pc-edit-btn {
+  display:inline-flex; align-items:center; gap:4px;
+  font-size:0.72rem; font-weight:600; font-family:inherit;
+  color:var(--accent); background:rgba(124,107,255,0.1);
+  border:1px solid rgba(124,107,255,0.25);
+  padding:2px 10px; border-radius:99px;
+  cursor:pointer; transition:all 0.2s; margin-left:auto;
+}
+.pc-edit-btn:hover { background:var(--accent); color:#fff; }
+
 /* Fix standard appearance property (lint) */
 .form-group select { appearance:none; -webkit-appearance:none; }
 
