@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # CommunityMarket – India's Community Price Tracker
 
 A community-driven web app where anyone can report and track real market prices across India.
@@ -50,3 +51,6 @@ Your app will be live at: `https://communitymarket.onrender.com`
 | `communitymarket.store` | GoDaddy | ~₹200/yr |
 
 Point your domain's DNS **A record** to Render's IP after deploying.
+=======
+# communitymarket
+>>>>>>> 8ced91e95f68387f09db4011fa8561d34bf49d31
