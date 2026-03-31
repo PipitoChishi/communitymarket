@@ -26,8 +26,15 @@
         <a href="#leaderboard" class="nav-link" id="nav-leaderboard">Leaderboard</a>
       </div>
       <div class="nav-actions">
-        <button class="btn-ghost" id="locationBtn">📍 Set Location</button>
-        <button class="btn-primary" id="openSubmitModal">+ Report Price</button>
+        <div id="navAuthGuest">
+          <button class="btn-ghost" onclick="openAuthModal('login')">Login</button>
+          <button class="btn-primary" onclick="openAuthModal('register')">Register</button>
+        </div>
+        <div id="navAuthUser" style="display:none;">
+          <div class="nav-user-info" id="navUserInfo"></div>
+          <button class="btn-ghost" onclick="appLogout()">Logout</button>
+          <button class="btn-primary" id="openSubmitModal">+ Report Price</button>
+        </div>
       </div>
       <button class="hamburger" id="hamburger" aria-label="Menu">
         <span></span><span></span><span></span>
@@ -283,6 +290,112 @@
 
   <!-- ───────── TOAST ───────── -->
   <div id="toast" class="toast"></div>
+
+  <!-- ───────── AUTH MODAL ───────── -->
+  <div class="modal-overlay" id="authOverlay" onclick="handleAuthOverlayClick(event)">
+    <div class="modal auth-modal" id="authModal">
+      <div class="modal-header">
+        <div class="auth-tabs">
+          <button class="auth-tab active" id="tabLogin" onclick="switchAuthTab('login')">Login</button>
+          <button class="auth-tab" id="tabRegister" onclick="switchAuthTab('register')">Register</button>
+        </div>
+        <button class="modal-close" onclick="closeAuthModal()">✕</button>
+      </div>
+      <div class="modal-body">
+
+        <!-- LOGIN FORM -->
+        <form id="loginForm" onsubmit="submitLogin(event)">
+          <p class="auth-subtitle">Welcome back to CommunityMarket</p>
+          <div class="form-group">
+            <label for="loginEmail">Email Address</label>
+            <input type="email" id="loginEmail" placeholder="you@example.com" required />
+          </div>
+          <div class="form-group">
+            <label for="loginPassword">Password</label>
+            <input type="password" id="loginPassword" placeholder="Your password" required />
+          </div>
+          <div class="auth-error" id="loginError"></div>
+          <div class="modal-actions">
+            <button type="submit" class="btn-primary full-width" id="loginBtn">Login →</button>
+          </div>
+          <p class="auth-switch">Don't have an account? <a href="#" onclick="switchAuthTab('register')">Register here</a></p>
+        </form>
+
+        <!-- REGISTER FORM -->
+        <form id="registerForm" onsubmit="submitRegister(event)" style="display:none;">
+          <p class="auth-subtitle">Join India's Community Price Tracker</p>
+
+          <!-- Role Toggle -->
+          <div class="role-toggle">
+            <button type="button" class="role-btn active" id="roleCustomer" onclick="selectRole('customer')">
+              🛍️ Customer
+            </button>
+            <button type="button" class="role-btn" id="roleSeller" onclick="selectRole('seller')">
+              🏪 Seller / Shopkeeper
+            </button>
+          </div>
+          <input type="hidden" id="regRole" value="customer" />
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="regName">Full Name *</label>
+              <input type="text" id="regName" placeholder="Your name" required />
+            </div>
+            <div class="form-group">
+              <label for="regCity">City *</label>
+              <input type="text" id="regCity" placeholder="e.g. Mumbai" required />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="regEmail">Email Address *</label>
+              <input type="email" id="regEmail" placeholder="you@example.com" required />
+            </div>
+            <div class="form-group">
+              <label for="regPhone">Phone (optional)</label>
+              <input type="tel" id="regPhone" placeholder="+91 98765 43210" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="regPassword">Password *</label>
+            <input type="password" id="regPassword" placeholder="Min 6 characters" required minlength="6" />
+          </div>
+
+          <!-- Seller-only fields -->
+          <div id="sellerFields" style="display:none;">
+            <div class="seller-divider">🏪 Shop Details</div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="regShopName">Shop Name *</label>
+                <input type="text" id="regShopName" placeholder="e.g. Ravi General Store" />
+              </div>
+              <div class="form-group">
+                <label for="regShopCat">Shop Category</label>
+                <select id="regShopCat">
+                  <option value="">Select…</option>
+                  <option value="groceries">🛒 Groceries</option>
+                  <option value="vegetables">🥦 Vegetables</option>
+                  <option value="fuel">⛽ Fuel</option>
+                  <option value="electronics">💻 Electronics</option>
+                  <option value="clothing">👕 Clothing</option>
+                  <option value="medicine">💊 Medicine / Pharmacy</option>
+                  <option value="transport">🚗 Transport</option>
+                  <option value="housing">🏠 Housing / Real Estate</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="auth-error" id="registerError"></div>
+          <div class="modal-actions">
+            <button type="submit" class="btn-primary full-width" id="registerBtn">Create Account →</button>
+          </div>
+          <p class="auth-switch">Already have an account? <a href="#" onclick="switchAuthTab('login')">Login here</a></p>
+        </form>
+
+      </div>
+    </div>
+  </div>
 
   <!-- ───────── SCRIPTS ───────── -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>

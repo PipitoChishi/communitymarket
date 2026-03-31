@@ -1,12 +1,15 @@
 /* ══════════════════════════════════════════════════════════
-   PriceWatch – app.js
+   CommunityMarket – app.js
    Frontend logic – all data loaded from the REST API
-   API base: http://localhost:3001/api
    ══════════════════════════════════════════════════════════ */
 
 'use strict';
 
 const API = 'http://localhost:3001/api';
+
+// ── AUTH STATE ──
+let currentUser  = JSON.parse(localStorage.getItem('cm_user')  || 'null');
+let currentToken = localStorage.getItem('cm_token') || null;
 
 // ────────────────────────────────────────────────────────────
 // STATE
@@ -38,6 +41,7 @@ const CATEGORIES = [
 // INIT
 // ────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
+  updateNavAuth();
   setupNavScroll();
   setupHamburger();
   buildFilterPills();
@@ -45,6 +49,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupSort();
   setupChartTabs();
   setupLoadMore();
+
+  // Wire submit modal button
+  const submitBtn = document.getElementById('openSubmitModal');
+  if (submitBtn) submitBtn.addEventListener('click', openModal);
 
   // Show skeletons while data loads
   showProductSkeletons();
@@ -567,9 +575,9 @@ function handleOverlayClick(e) {
   if (e.target === document.getElementById('modalOverlay')) closeModal();
 }
 
-document.getElementById('openSubmitModal').addEventListener('click', openModal);
+// openModal and modalClose wired in DOMContentLoaded above
 document.getElementById('modalClose').addEventListener('click', closeModal);
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModal(); closeAuthModal(); } });
 
 // ────────────────────────────────────────────────────────────
 // SUBMIT PRICE
@@ -580,6 +588,7 @@ document.getElementById('priceForm').addEventListener('submit', async (e) => {
   btn.disabled = true;
   btn.textContent = 'Submitting…';
 
+  const token = currentToken;
   const body = {
     name:     document.getElementById('productName').value.trim(),
     category: document.getElementById('productCategory').value,
@@ -587,14 +596,16 @@ document.getElementById('priceForm').addEventListener('submit', async (e) => {
     unit:     document.getElementById('productUnit').value,
     store:    document.getElementById('storeName').value.trim(),
     city:     document.getElementById('locationName').value.trim(),
-    reporter: document.getElementById('reporterName').value.trim(),
+    reporter: currentUser ? currentUser.name : document.getElementById('reporterName').value.trim(),
     note:     document.getElementById('priceNote').value.trim(),
   };
 
   try {
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
     const res = await fetch(`${API}/products`, {
       method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body:    JSON.stringify(body),
     });
 
@@ -652,18 +663,6 @@ function closeMobile() {
 }
 
 // ────────────────────────────────────────────────────────────
-// LOCATION
-// ────────────────────────────────────────────────────────────
-document.getElementById('locationBtn').addEventListener('click', () => {
-  if (!navigator.geolocation) { showToast('⚠️ Geolocation not supported.'); return; }
-  showToast('📍 Detecting your location…');
-  navigator.geolocation.getCurrentPosition(
-    pos => showToast(`✅ Location set! (${pos.coords.latitude.toFixed(2)}, ${pos.coords.longitude.toFixed(2)})`),
-    ()   => showToast('⚠️ Location permission denied.')
-  );
-});
-
-// ────────────────────────────────────────────────────────────
 // TOAST
 // ────────────────────────────────────────────────────────────
 let toastTimer;
@@ -683,4 +682,153 @@ function hexToRgba(hex, alpha) {
   const g = parseInt(hex.slice(3,5),16);
   const b = parseInt(hex.slice(5,7),16);
   return `rgba(${r},${g},${b},${alpha})`;
+}
+
+// ════════════════════════════════════════════════════════
+// AUTH
+// ════════════════════════════════════════════════════════
+
+function updateNavAuth() {
+  const guest = document.getElementById('navAuthGuest');
+  const user  = document.getElementById('navAuthUser');
+  const info  = document.getElementById('navUserInfo');
+  if (!guest || !user) return;
+  if (currentUser) {
+    guest.style.display = 'none';
+    user.style.display  = 'flex';
+    const isSeller = currentUser.role === 'seller';
+    info.innerHTML = `
+      <span>${currentUser.name}</span>
+      ${isSeller
+        ? `<span class="nav-seller-badge">🏪 Seller</span>`
+        : `<span class="nav-user-role">Customer</span>`}
+    `;
+  } else {
+    guest.style.display = 'flex';
+    user.style.display  = 'none';
+  }
+}
+
+function openAuthModal(tab = 'login') {
+  document.getElementById('authOverlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  switchAuthTab(tab);
+}
+
+function closeAuthModal() {
+  document.getElementById('authOverlay').classList.remove('open');
+  document.body.style.overflow = '';
+  document.getElementById('loginError').textContent    = '';
+  document.getElementById('registerError').textContent = '';
+}
+
+function handleAuthOverlayClick(e) {
+  if (e.target === document.getElementById('authOverlay')) closeAuthModal();
+}
+
+function switchAuthTab(tab) {
+  const isLogin = tab === 'login';
+  document.getElementById('loginForm').style.display    = isLogin ? '' : 'none';
+  document.getElementById('registerForm').style.display = isLogin ? 'none' : '';
+  document.getElementById('tabLogin').classList.toggle('active',    isLogin);
+  document.getElementById('tabRegister').classList.toggle('active', !isLogin);
+  setTimeout(() => {
+    (isLogin
+      ? document.getElementById('loginEmail')
+      : document.getElementById('regName')
+    ).focus();
+  }, 50);
+}
+
+function selectRole(role) {
+  document.getElementById('regRole').value = role;
+  document.getElementById('roleCustomer').classList.toggle('active', role === 'customer');
+  document.getElementById('roleSeller').classList.toggle('active',   role === 'seller');
+  document.getElementById('sellerFields').style.display = role === 'seller' ? '' : 'none';
+}
+
+async function submitLogin(e) {
+  e.preventDefault();
+  const btn = document.getElementById('loginBtn');
+  btn.disabled = true; btn.textContent = 'Logging in…';
+  const errEl = document.getElementById('loginError');
+  errEl.textContent = '';
+  try {
+    const res = await fetch(`${API}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email:    document.getElementById('loginEmail').value.trim(),
+        password: document.getElementById('loginPassword').value,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Login failed');
+
+    currentToken = data.token;
+    currentUser  = data.user;
+    localStorage.setItem('cm_token', currentToken);
+    localStorage.setItem('cm_user',  JSON.stringify(currentUser));
+
+    updateNavAuth();
+    closeAuthModal();
+    e.target.reset();
+    showToast(`👋 Welcome back, ${currentUser.name}!`);
+  } catch (err) {
+    errEl.textContent = err.message;
+  } finally {
+    btn.disabled = false; btn.textContent = 'Login →';
+  }
+}
+
+async function submitRegister(e) {
+  e.preventDefault();
+  const btn = document.getElementById('registerBtn');
+  btn.disabled = true; btn.textContent = 'Creating account…';
+  const errEl = document.getElementById('registerError');
+  errEl.textContent = '';
+  try {
+    const role = document.getElementById('regRole').value;
+    const body = {
+      name:          document.getElementById('regName').value.trim(),
+      email:         document.getElementById('regEmail').value.trim(),
+      password:      document.getElementById('regPassword').value,
+      city:          document.getElementById('regCity').value.trim(),
+      phone:         document.getElementById('regPhone').value.trim(),
+      role,
+      shop_name:     role === 'seller' ? document.getElementById('regShopName').value.trim() : undefined,
+      shop_category: role === 'seller' ? document.getElementById('regShopCat').value          : undefined,
+    };
+    const res = await fetch(`${API}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Registration failed');
+
+    currentToken = data.token;
+    currentUser  = data.user;
+    localStorage.setItem('cm_token', currentToken);
+    localStorage.setItem('cm_user',  JSON.stringify(currentUser));
+
+    updateNavAuth();
+    closeAuthModal();
+    e.target.reset();
+    const isSeller = currentUser.role === 'seller';
+    showToast(`🎉 Welcome to CommunityMarket, ${currentUser.name}! ${isSeller ? '🏪 Seller account created.' : '🛍️ Happy shopping!'}`);
+  } catch (err) {
+    errEl.textContent = err.message;
+  } finally {
+    btn.disabled = false; btn.textContent = 'Create Account →';
+  }
+}
+
+function appLogout() {
+  currentUser  = null;
+  currentToken = null;
+  localStorage.removeItem('cm_token');
+  localStorage.removeItem('cm_user');
+  updateNavAuth();
+  showToast('👋 Logged out. See you soon!');
 }

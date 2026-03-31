@@ -98,6 +98,19 @@ async function initDb() {
 
   // ── Schema ──────────────────────────────────────────
   db.run(`
+    CREATE TABLE IF NOT EXISTS users (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      name          TEXT    NOT NULL,
+      email         TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+      password_hash TEXT    NOT NULL,
+      role          TEXT    NOT NULL DEFAULT 'customer',
+      shop_name     TEXT,
+      shop_category TEXT,
+      city          TEXT    DEFAULT 'Unknown',
+      phone         TEXT,
+      created_at    TEXT    DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS price_reports (
       id          INTEGER PRIMARY KEY AUTOINCREMENT,
       name        TEXT    NOT NULL,
