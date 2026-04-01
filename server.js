@@ -239,6 +239,44 @@ app.get('/api/products', (req, res) => {
   }
 });
 
+// ── GET /api/products/compare ────────────────────────────
+app.get('/api/products/compare', (req, res) => {
+  try {
+    const idsParam = req.query.ids || '';
+    const ids = idsParam.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n > 0);
+    if (ids.length < 2 || ids.length > 4) {
+      return res.status(400).json({ error: 'Provide 2–4 product IDs to compare' });
+    }
+    const placeholders = ids.map(() => '?').join(',');
+    const products = query(
+      `SELECT * FROM price_reports WHERE id IN (${placeholders}) ORDER BY price ASC`,
+      ids
+    );
+    // Enrich with seller ratings
+    const enriched = products.map(p => {
+      let sellerRating = null;
+      if (p.reporter_id && p.reporter_role === 'seller') {
+        const agg = queryOne(
+          'SELECT ROUND(AVG(rating),1) AS avg_rating, COUNT(*) AS total FROM seller_ratings WHERE seller_id = ?',
+          [p.reporter_id]
+        );
+        sellerRating = { avg: agg?.avg_rating || 0, count: agg?.total || 0 };
+      }
+      return {
+        ...p,
+        verified: p.verified === 1,
+        time: relativeTime(p.created_at),
+        pctChange: pctChange(p.price, p.prev_price),
+        sellerRating,
+      };
+    });
+    res.json(enriched);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to compare products' });
+  }
+});
+
 // ── GET /api/products/:id ────────────────────────────────
 app.get('/api/products/:id', (req, res) => {
   try {

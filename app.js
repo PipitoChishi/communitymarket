@@ -28,6 +28,12 @@ let detailChart    = null; // detail modal chart
 // ── CART STATE ──
 let cart = JSON.parse(localStorage.getItem('cm_cart') || '[]');
 
+// ── WISHLIST STATE ──
+let wishlist = JSON.parse(localStorage.getItem('cm_wishlist') || '[]');
+
+// ── COMPARE STATE ──
+let compareList = []; // array of product IDs, max 4
+
 // ────────────────────────────────────────────────────────────
 // CONSTANTS
 // ────────────────────────────────────────────────────────────
@@ -56,6 +62,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupChartTabs();
   setupLoadMore();
   updateCartBadge();
+  updateWishlistBadge();
+  updateCompareBar();
 
   // Wire submit modal button
   const submitBtn = document.getElementById('openSubmitModal');
@@ -433,17 +441,21 @@ function renderProducts() {
       ? `<div class="pc-note">\uD83D\uDCDD ${escHtml(p.note)}</div>`
       : '';
     const isOwner = currentUser && currentUser.role === 'seller' && p.reporter_id && currentUser.id === p.reporter_id;
+    const ownerBadge = isOwner ? `<span class="pc-owner-badge">\u2728 Your Listing</span>` : '';
     const editBtn = isOwner
       ? `<button class="pc-edit-btn" onclick="event.stopPropagation();openEditProduct(${p.id})">\u270f\ufe0f Edit</button>`
       : '';
     const prevPriceHtml = p.prev_price && p.prev_price !== p.price
       ? `<div class="pc-prev-price">\u20b9${p.prev_price}</div>`
       : '';
+    const inWishlist = wishlist.some(w => w.id === p.id);
+    const inCompare = compareList.includes(p.id);
     return `
     <div class="product-card" id="product-${p.id}" onclick="showProductDetail(${p.id})">
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
         <div class="pc-category-badge">${catInfo.emoji} ${catInfo.label}</div>
         ${sellerBadge}
+        ${ownerBadge}
         ${editBtn}
       </div>
       <div class="pc-name">${p.name}</div>
@@ -460,7 +472,11 @@ function renderProducts() {
       <div class="pc-meta">
         <span>${p.verified ? '<span class="pc-verified">\u2713 Verified</span>' : '\u23F3 Unverified'}</span>
         <span>\uD83D\uDC64 ${p.reporter}</span>
-        <button class="pc-cart-btn" onclick="event.stopPropagation();addToCart(${p.id})">\uD83D\uDED2 Add to Cart</button>
+      </div>
+      <div class="pc-actions-row">
+        <button class="pc-cart-btn" onclick="event.stopPropagation();addToCart(${p.id})">\uD83D\uDED2 Cart</button>
+        <button class="pc-wishlist-btn ${inWishlist ? 'active' : ''}" onclick="event.stopPropagation();toggleWishlistItem(${p.id})"><span class="heart-icon">${inWishlist ? '\u2764\ufe0f' : '\uD83E\uDD0D'}</span> ${inWishlist ? 'Saved' : 'Save'}</button>
+        <button class="pc-compare-btn ${inCompare ? 'active' : ''}" onclick="event.stopPropagation();toggleCompare(${p.id})">\u2696\ufe0f ${inCompare ? 'Selected' : 'Compare'}</button>
       </div>
     </div>`;
   }).join('');
@@ -506,10 +522,29 @@ async function showProductDetail(id) {
     ${p.note ? `<div class="detail-info-item" style="grid-column:1/-1;"><div class="detail-info-label">Notes</div>${escHtml(p.note)}</div>` : ''}
   `;
 
-  document.getElementById('detailActions').innerHTML = `
-    <button class="btn-primary" onclick="addToCart(${p.id});closeDetailModal()">\uD83D\uDED2 Add to Cart</button>
-    <button class="btn-outline" onclick="closeDetailModal()">Close</button>
-  `;
+  const isOwner = currentUser && currentUser.role === 'seller' && p.reporter_id && currentUser.id === p.reporter_id;
+  const inWishlist = wishlist.some(w => w.id === p.id);
+  if (isOwner) {
+    document.getElementById('detailActions').innerHTML = `
+      <div class="detail-actions-grid">
+        <button class="btn-primary" onclick="openEditProduct(${p.id});closeDetailModal()">✏️ Edit Listing</button>
+        <button class="btn-outline" style="border-color:var(--rose);color:var(--rose);" onclick="deleteSdProduct(${p.id});closeDetailModal()">🗑 Delete</button>
+        <button class="btn-outline" onclick="addToCart(${p.id});closeDetailModal()">\uD83D\uDED2 Add to Cart</button>
+        <button class="btn-outline" onclick="closeDetailModal()">Close</button>
+      </div>
+    `;
+  } else {
+    document.getElementById('detailActions').innerHTML = `
+      <div class="detail-actions-grid">
+        <button class="btn-primary" onclick="addToCart(${p.id});closeDetailModal()">\uD83D\uDED2 Add to Cart</button>
+        <button class="btn-outline" onclick="toggleWishlistItem(${p.id});closeDetailModal()" style="${inWishlist ? 'border-color:var(--rose);color:var(--rose);' : ''}">
+          ${inWishlist ? '❤️ In Wishlist' : '🤍 Add to Wishlist'}
+        </button>
+        <button class="btn-outline" onclick="toggleCompare(${p.id});closeDetailModal()">⚖️ Compare</button>
+        <button class="btn-outline" onclick="closeDetailModal()">Close</button>
+      </div>
+    `;
+  }
 
   document.getElementById('detailOverlay').classList.add('open');
   document.body.style.overflow = 'hidden';
@@ -757,9 +792,11 @@ function handleOverlayClick(e) {
 document.getElementById('modalClose').addEventListener('click', closeModal);
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
-    closeModal(); closeAuthModal(); closeDetailModal();
+    closeModal(); closeAuthModal(); closeDetailModal(); closeCompareModal();
     const cartOv = document.getElementById('cartOverlay');
     if (cartOv && cartOv.classList.contains('open')) toggleCart();
+    const wlOv = document.getElementById('wishlistOverlay');
+    if (wlOv && wlOv.classList.contains('open')) toggleWishlist();
   }
 });
 
@@ -1629,4 +1666,287 @@ function checkoutCart() {
   cart = [];
   saveCart();
   toggleCart();
+}
+
+// ════════════════════════════════════════════════════════
+// WISHLIST SYSTEM
+// ════════════════════════════════════════════════════════
+
+function saveWishlist() {
+  localStorage.setItem('cm_wishlist', JSON.stringify(wishlist));
+  updateWishlistBadge();
+  renderWishlistItems();
+}
+
+function updateWishlistBadge() {
+  const badge = document.getElementById('wishlistBadge');
+  if (!badge) return;
+  badge.textContent = wishlist.length;
+  badge.classList.remove('pulse');
+  void badge.offsetWidth;
+  if (wishlist.length > 0) badge.classList.add('pulse');
+}
+
+function toggleWishlistItem(productId) {
+  const idx = wishlist.findIndex(w => w.id === productId);
+  if (idx > -1) {
+    wishlist.splice(idx, 1);
+    saveWishlist();
+    showToast('🤍 Removed from wishlist');
+  } else {
+    const p = allProducts.find(x => x.id === productId);
+    if (!p) return;
+    wishlist.push({
+      id: p.id,
+      name: p.name,
+      price: p.price,
+      unit: p.unit,
+      store: p.store,
+      city: p.city,
+      category: p.category,
+    });
+    saveWishlist();
+    showToast(`❤️ ${p.name} added to wishlist!`);
+  }
+  renderProducts(); // re-render to update heart icons
+}
+
+function removeFromWishlist(productId) {
+  wishlist = wishlist.filter(w => w.id !== productId);
+  saveWishlist();
+  renderProducts();
+}
+
+function moveWishlistToCart(productId) {
+  const item = wishlist.find(w => w.id === productId);
+  if (!item) return;
+  addToCart(productId);
+  wishlist = wishlist.filter(w => w.id !== productId);
+  saveWishlist();
+  renderProducts();
+}
+
+function moveAllWishlistToCart() {
+  if (wishlist.length === 0) {
+    showToast('❤️ Your wishlist is empty!');
+    return;
+  }
+  wishlist.forEach(item => {
+    const existing = cart.find(c => c.id === item.id);
+    if (existing) {
+      existing.qty++;
+    } else {
+      cart.push({ ...item, qty: 1 });
+    }
+  });
+  const count = wishlist.length;
+  wishlist = [];
+  saveWishlist();
+  saveCart();
+  renderProducts();
+  showToast(`🛒 Moved ${count} item${count !== 1 ? 's' : ''} to cart!`);
+}
+
+function toggleWishlist() {
+  const overlay = document.getElementById('wishlistOverlay');
+  overlay.classList.toggle('open');
+  if (overlay.classList.contains('open')) {
+    document.body.style.overflow = 'hidden';
+    renderWishlistItems();
+  } else {
+    document.body.style.overflow = '';
+  }
+}
+
+function handleWishlistOverlay(e) {
+  if (e.target === document.getElementById('wishlistOverlay')) toggleWishlist();
+}
+
+function renderWishlistItems() {
+  const container = document.getElementById('wishlistItems');
+  const footer = document.getElementById('wishlistFooter');
+  if (!container) return;
+
+  if (wishlist.length === 0) {
+    container.innerHTML = `
+      <div class="cart-empty">
+        <div class="cart-empty-icon">❤️</div>
+        <p>Your wishlist is empty</p>
+        <p style="font-size:0.82rem;margin-top:8px;">Save products you love by clicking the heart button!</p>
+      </div>`;
+    if (footer) footer.style.display = 'none';
+    return;
+  }
+
+  if (footer) footer.style.display = '';
+  const CAT_EMOJI = {
+    groceries:'🛒', vegetables:'🥦', fuel:'⛽',
+    electronics:'💻', clothing:'👕', medicine:'💊',
+    transport:'🚗', housing:'🏠'
+  };
+
+  container.innerHTML = wishlist.map(item => `
+    <div class="wishlist-item">
+      <div class="wishlist-item-info">
+        <div class="wishlist-item-name">${CAT_EMOJI[item.category] || '📦'} ${escHtml(item.name)}</div>
+        <div class="wishlist-item-meta">📍 ${escHtml(item.store)}, ${escHtml(item.city)} · ${item.unit}</div>
+        <div class="wishlist-item-actions">
+          <button class="wishlist-move-btn" onclick="moveWishlistToCart(${item.id})">🛒 Move to Cart</button>
+          <button class="cart-item-remove" onclick="removeFromWishlist(${item.id})">✕ Remove</button>
+        </div>
+      </div>
+      <div class="wishlist-item-price">₹${item.price.toLocaleString()}</div>
+    </div>
+  `).join('');
+}
+
+// ════════════════════════════════════════════════════════
+// COMPARE SYSTEM
+// ════════════════════════════════════════════════════════
+
+function toggleCompare(productId) {
+  const idx = compareList.indexOf(productId);
+  if (idx > -1) {
+    compareList.splice(idx, 1);
+  } else {
+    if (compareList.length >= 4) {
+      showToast('⚖️ Maximum 4 products can be compared at once. Remove one first.');
+      return;
+    }
+    compareList.push(productId);
+  }
+  updateCompareBar();
+  renderProducts(); // re-render to update button states
+}
+
+function clearCompare() {
+  compareList = [];
+  updateCompareBar();
+  renderProducts();
+}
+
+function updateCompareBar() {
+  const bar = document.getElementById('compareBar');
+  const itemsEl = document.getElementById('compareBarItems');
+  const countEl = document.getElementById('compareBarCount');
+  const compareBtn = document.getElementById('compareBarBtn');
+  if (!bar) return;
+
+  if (compareList.length === 0) {
+    bar.classList.remove('visible');
+    return;
+  }
+
+  bar.classList.add('visible');
+  countEl.textContent = `${compareList.length} item${compareList.length !== 1 ? 's' : ''} selected`;
+  compareBtn.disabled = compareList.length < 2;
+
+  itemsEl.innerHTML = compareList.map(id => {
+    const p = allProducts.find(x => x.id === id);
+    if (!p) return '';
+    return `
+      <div class="compare-bar-chip">
+        ${p.name.length > 18 ? p.name.slice(0, 16) + '…' : p.name}
+        <button class="compare-bar-chip-remove" onclick="toggleCompare(${id})">✕</button>
+      </div>
+    `;
+  }).join('');
+}
+
+function closeCompareModal() {
+  document.getElementById('compareOverlay').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+function handleCompareOverlay(e) {
+  if (e.target === document.getElementById('compareOverlay')) closeCompareModal();
+}
+
+async function openCompareModal() {
+  if (compareList.length < 2) {
+    showToast('⚖️ Select at least 2 products to compare.');
+    return;
+  }
+
+  document.getElementById('compareOverlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  document.getElementById('compareContent').innerHTML = `
+    <div style="text-align:center;padding:40px;color:var(--text3);">
+      <div style="font-size:2rem;margin-bottom:12px;">⚖️</div>
+      <p>Loading comparison…</p>
+    </div>`;
+
+  try {
+    const ids = compareList.join(',');
+    const products = await apiFetch(`/products/compare?ids=${ids}`);
+    renderCompareContent(products);
+  } catch (e) {
+    document.getElementById('compareContent').innerHTML = `
+      <div style="text-align:center;padding:40px;color:var(--text3);">
+        <p>Failed to load comparison. Try again.</p>
+      </div>`;
+  }
+}
+
+function renderCompareContent(products) {
+  if (!products || products.length === 0) return;
+
+  const cheapest = products.reduce((a, b) => a.price < b.price ? a : b);
+  const mostExpensive = products.reduce((a, b) => a.price > b.price ? a : b);
+  const savings = mostExpensive.price - cheapest.price;
+
+  const colClass = `cols-${Math.min(products.length, 4)}`;
+
+  const cards = products.map(p => {
+    const isCheapest = p.id === cheapest.id && products.length > 1;
+    const ch = p.pctChange || { value: 0, direction: 'flat' };
+    const chCls = ch.direction === 'up' ? 'up' : ch.direction === 'down' ? 'down' : 'flat';
+    const arrow = ch.direction === 'up' ? '▲' : ch.direction === 'down' ? '▼' : '–';
+    const isSeller = p.reporter_role === 'seller';
+
+    let ratingHtml = '';
+    if (p.sellerRating && p.sellerRating.count > 0) {
+      const filled = '★'.repeat(Math.round(p.sellerRating.avg));
+      const empty = '☆'.repeat(5 - Math.round(p.sellerRating.avg));
+      ratingHtml = `<div class="compare-card-rating">${filled}${empty} ${p.sellerRating.avg} (${p.sellerRating.count})</div>`;
+    }
+
+    return `
+      <div class="compare-card ${isCheapest ? 'cheapest' : ''}">
+        ${isCheapest ? '<div class="compare-cheapest-tag">💰 Best Price</div>' : ''}
+        <div class="compare-card-name">${escHtml(p.name)}</div>
+        <div class="compare-card-store">📍 ${escHtml(p.store)}, ${escHtml(p.city)}</div>
+        <div class="compare-card-price">₹${p.price.toLocaleString()}</div>
+        <div class="compare-card-unit">${p.unit}</div>
+        <div class="compare-card-change ${chCls}">${arrow} ${ch.value}%</div>
+        <div class="compare-card-meta">
+          <span>👤 ${escHtml(p.reporter)}</span>
+          ${isSeller ? `<span class="compare-card-seller">🏪 ${escHtml(p.reporter_shop || 'Verified Seller')}</span>` : ''}
+          ${ratingHtml}
+          ${p.verified ? '<span style="color:var(--accent2);">✓ Verified</span>' : '<span>⏳ Unverified</span>'}
+          ${p.note ? `<span>📝 ${escHtml(p.note)}</span>` : ''}
+          <span>${p.time}</span>
+        </div>
+        <div class="compare-card-actions">
+          <button class="btn-primary" onclick="addToCart(${p.id});closeCompareModal()">🛒 Add to Cart</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  let savingsHtml = '';
+  if (savings > 0) {
+    const pct = ((savings / mostExpensive.price) * 100).toFixed(1);
+    savingsHtml = `
+      <div class="compare-savings">
+        <div class="compare-savings-label">💰 You could save by picking the best price</div>
+        <div class="compare-savings-value">₹${savings.toLocaleString()} (${pct}% less)</div>
+      </div>
+    `;
+  }
+
+  document.getElementById('compareContent').innerHTML = `
+    <div class="compare-grid ${colClass}">${cards}</div>
+    ${savingsHtml}
+  `;
 }
