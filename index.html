@@ -228,7 +228,10 @@
   <div class="modal-overlay" id="modalOverlay" onclick="handleOverlayClick(event)">
     <div class="modal" id="modal">
       <div class="modal-header">
-        <h2>📢 Report a Price</h2>
+        <div>
+          <h2>📋 Report a Price</h2>
+          <p style="font-size:0.78rem;color:var(--text3);margin-top:4px;">Spotted a price? Report it and our team will verify it.</p>
+        </div>
         <button class="modal-close" id="modalClose" onclick="closeModal()">✕</button>
       </div>
       <div class="modal-body">
@@ -290,7 +293,7 @@
           </div>
           <div class="modal-actions">
             <button type="button" class="btn-ghost" onclick="closeModal()">Cancel</button>
-            <button type="submit" class="btn-primary" id="submitBtn">Submit Report ✓</button>
+            <button type="submit" class="btn-primary" id="submitBtn">Submit for Review ✓</button>
           </div>
         </form>
       </div>
