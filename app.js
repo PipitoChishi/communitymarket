@@ -1519,7 +1519,7 @@ async function submitSdAddProduct() {
         'Content-Type':  'application/json',
         'Authorization': `Bearer ${currentToken}`,
       },
-      body: JSON.stringify({ name, category, price, unit, store, city, note }),
+      body: JSON.stringify({ name, category, price, unit, store, city, note, is_listing: true }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Failed to add product');

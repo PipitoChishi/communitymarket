@@ -332,7 +332,7 @@ app.post('/api/products', (req, res) => {
       try { req.user = jwt.verify(token, JWT_SECRET); } catch (e) {}
     }
 
-    const { name, category, price, unit, store, city, reporter, note } = req.body;
+    const { name, category, price, unit, store, city, reporter, note, is_listing } = req.body;
 
     if (!name || !category || price === undefined || price === null) {
       return res.status(400).json({ error: 'name, category, and price are required' });
@@ -353,6 +353,7 @@ app.post('/api/products', (req, res) => {
     const storeName    = (store  || '').trim() || 'Unknown Store';
     const cityName     = (city   || '').trim() || 'Unknown City';
     const noteVal      = (note   || '').trim() || null;
+    const listingFlag  = is_listing ? 1 : 0;
 
     // Insert report
     let reporterRole = req.user?.role || 'anonymous';
@@ -364,10 +365,10 @@ app.post('/api/products', (req, res) => {
         storeName;
     }
     run(
-      `INSERT INTO price_reports (name,category,price,prev_price,unit,store,city,reporter,reporter_id,reporter_role,reporter_shop,note)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+      `INSERT INTO price_reports (name,category,price,prev_price,unit,store,city,reporter,reporter_id,reporter_role,reporter_shop,note,is_listing)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [name.trim(), category, numericPrice, prev_price, unit||'per kg', storeName, cityName,
-       reporterName, req.user?.id || null, reporterRole, reporterShop, noteVal]
+       reporterName, req.user?.id || null, reporterRole, reporterShop, noteVal, listingFlag]
     );
 
 
@@ -656,7 +657,7 @@ app.get('/api/seller/dashboard', authMiddleware, (req, res) => {
 
     const products = query(
       `SELECT id, name, category, price, prev_price, unit, store, city, note, verified, created_at
-       FROM price_reports WHERE reporter_id = ? ORDER BY created_at DESC`,
+       FROM price_reports WHERE reporter_id = ? AND is_listing = 1 ORDER BY created_at DESC`,
       [req.user.id]
     ).map(p => ({ ...p, pctChange: pctChange(p.price, p.prev_price), time: relativeTime(p.created_at) }));
 

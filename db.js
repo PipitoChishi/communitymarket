@@ -166,6 +166,7 @@ async function initDb() {
     `ALTER TABLE price_reports ADD COLUMN reporter_id   INTEGER`,
     `ALTER TABLE price_reports ADD COLUMN reporter_role TEXT DEFAULT 'anonymous'`,
     `ALTER TABLE price_reports ADD COLUMN reporter_shop TEXT`,
+    `ALTER TABLE price_reports ADD COLUMN is_listing    INTEGER DEFAULT 0`,
   ];
   for (const m of migrations) {
     try { db.run(m); } catch (_) { /* column already exists */ }
