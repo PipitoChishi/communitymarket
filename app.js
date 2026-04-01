@@ -470,8 +470,8 @@ function renderProducts() {
       </div>
       <div class="pc-sparkline">${sparklineSVG(p)}</div>
       <div class="pc-meta">
-        <span>${p.verified ? '<span class="pc-verified">\u2713 Verified</span>' : '\u23F3 Unverified'}</span>
-        <span>\uD83D\uDC64 ${p.reporter}</span>
+        <span>${isSeller ? '<span class="pc-verified">🏪 Seller Listed</span>' : (p.verified ? '<span class="pc-verified">\u2713 Verified</span>' : '📋 Pending Review')}</span>
+        <span>${isSeller ? '🏪 ' + escHtml(p.reporter_shop || p.reporter) : '👤 Reported by ' + escHtml(p.reporter)}</span>
       </div>
       <div class="pc-actions-row">
         <button class="pc-cart-btn" onclick="event.stopPropagation();addToCart(${p.id})">\uD83D\uDED2 Cart</button>
@@ -514,11 +514,15 @@ async function showProductDetail(id) {
     </div>
   `;
 
+  const isSeller = p.reporter_role === 'seller';
+  const sellerLabel = isSeller ? 'Seller' : 'Reported by';
+  const sellerValue = isSeller ? escHtml(p.reporter_shop || p.reporter) : escHtml(p.reporter);
+  const statusLabel = isSeller ? '🏪 Seller Listed' : (p.verified ? '✓ Verified' : '📋 Pending Review');
   document.getElementById('detailInfo').innerHTML = `
     <div class="detail-info-item"><div class="detail-info-label">Store</div>${escHtml(p.store)}</div>
     <div class="detail-info-item"><div class="detail-info-label">City</div>${escHtml(p.city)}</div>
-    <div class="detail-info-item"><div class="detail-info-label">Reporter</div>${escHtml(p.reporter)}</div>
-    <div class="detail-info-item"><div class="detail-info-label">Status</div>${p.verified ? '\u2713 Verified' : '\u23f3 Unverified'}</div>
+    <div class="detail-info-item"><div class="detail-info-label">${sellerLabel}</div>${sellerValue}</div>
+    <div class="detail-info-item"><div class="detail-info-label">Status</div>${statusLabel}</div>
     ${p.note ? `<div class="detail-info-item" style="grid-column:1/-1;"><div class="detail-info-label">Notes</div>${escHtml(p.note)}</div>` : ''}
   `;
 
@@ -819,6 +823,7 @@ document.getElementById('priceForm').addEventListener('submit', async (e) => {
     city:     document.getElementById('locationName').value.trim(),
     reporter: currentUser ? currentUser.name : document.getElementById('reporterName').value.trim(),
     note:     document.getElementById('priceNote').value.trim(),
+    is_listing: false,
   };
 
   try {
@@ -854,12 +859,12 @@ document.getElementById('priceForm').addEventListener('submit', async (e) => {
 
     e.target.reset();
     closeModal();
-    showToast(`✅ Price reported! +${newProduct.pointsAwarded} pts. Thanks, ${newProduct.reporter || 'Contributor'}!`);
+    showToast(`📋 Price report submitted for review! +${newProduct.pointsAwarded} pts. Our team will verify it shortly.`);
   } catch (err) {
     showToast(`❌ ${err.message}`);
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Submit Report ✓';
+    btn.textContent = 'Submit for Review ✓';
   }
 });
 
