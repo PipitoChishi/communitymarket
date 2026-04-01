@@ -427,11 +427,11 @@ function renderProducts() {
     const catInfo = CATEGORIES.find(c => c.id === p.category) || { emoji:'📦', label:p.category };
     const chCls   = ch.direction === 'up' ? 'up' : ch.direction === 'down' ? 'down' : 'flat';
     const arrow   = ch.direction === 'up' ? '▲' : ch.direction === 'down' ? '▼' : '–';
-    const isSeller = p.reporter_role === 'seller';
-    const sellerBadge = isSeller
-      ? `<span class="pc-seller-badge">\uD83C\uDFEA ${escHtml(p.reporter_shop || 'Verified Seller')}</span>`
+    const isSellerListing = p.reporter_role === 'seller' && p.is_listing;
+    const sellerBadge = isSellerListing
+      ? `<span class="pc-seller-badge">\uD83C\uDFEA ${escHtml(p.reporter_shop || p.store || 'Verified Seller')}</span>`
       : '';
-    const ratingRow = isSeller && p.reporter_id
+    const ratingRow = isSellerListing && p.reporter_id
       ? `<div style="margin-top:6px;display:flex;align-items:center;gap:6px;">
            <span class="pc-stars" id="stars-${p.id}"><span style="color:var(--text3);font-size:0.72rem;">Loading...</span></span>
            <button class="pc-rating-btn" onclick="event.stopPropagation();openRatingModal(${p.reporter_id},'${escHtml(p.reporter)}','${escHtml(p.reporter_shop||'')}')">Rate seller</button>
@@ -440,7 +440,7 @@ function renderProducts() {
     const noteRow = p.note
       ? `<div class="pc-note">\uD83D\uDCDD ${escHtml(p.note)}</div>`
       : '';
-    const isOwner = currentUser && currentUser.role === 'seller' && p.reporter_id && currentUser.id === p.reporter_id;
+    const isOwner = currentUser && currentUser.role === 'seller' && p.reporter_id && currentUser.id === p.reporter_id && p.is_listing;
     const ownerBadge = isOwner ? `<span class="pc-owner-badge">\u2728 Your Listing</span>` : '';
     const editBtn = isOwner
       ? `<button class="pc-edit-btn" onclick="event.stopPropagation();openEditProduct(${p.id})">\u270f\ufe0f Edit</button>`
@@ -470,8 +470,8 @@ function renderProducts() {
       </div>
       <div class="pc-sparkline">${sparklineSVG(p)}</div>
       <div class="pc-meta">
-        <span>${isSeller ? '<span class="pc-verified">🏪 Seller Listed</span>' : (p.verified ? '<span class="pc-verified">\u2713 Verified</span>' : '📋 Pending Review')}</span>
-        <span>${isSeller ? '🏪 ' + escHtml(p.reporter_shop || p.reporter) : '👤 Reported by ' + escHtml(p.reporter)}</span>
+        <span>${isSellerListing ? '<span class="pc-verified">🏪 Seller Listed</span>' : (p.verified ? '<span class="pc-verified">\u2713 Verified</span>' : '📋 Pending Review')}</span>
+        <span>${isSellerListing ? '🏪 Sold by ' + escHtml(p.reporter_shop || p.store) : '👤 Reported by ' + escHtml(p.reporter)}</span>
       </div>
       <div class="pc-actions-row">
         <button class="pc-cart-btn" onclick="event.stopPropagation();addToCart(${p.id})">\uD83D\uDED2 Cart</button>
@@ -482,7 +482,7 @@ function renderProducts() {
   }).join('');
 
   // Load inline seller ratings
-  shown.filter(p => p.reporter_role === 'seller' && p.reporter_id).forEach(p => {
+  shown.filter(p => p.reporter_role === 'seller' && p.is_listing && p.reporter_id).forEach(p => {
     loadInlineRating(p.reporter_id, p.id);
   });
 
@@ -514,10 +514,10 @@ async function showProductDetail(id) {
     </div>
   `;
 
-  const isSeller = p.reporter_role === 'seller';
-  const sellerLabel = isSeller ? 'Seller' : 'Reported by';
-  const sellerValue = isSeller ? escHtml(p.reporter_shop || p.reporter) : escHtml(p.reporter);
-  const statusLabel = isSeller ? '🏪 Seller Listed' : (p.verified ? '✓ Verified' : '📋 Pending Review');
+  const isSellerListing = p.reporter_role === 'seller' && p.is_listing;
+  const sellerLabel = isSellerListing ? 'Seller' : 'Reported by';
+  const sellerValue = isSellerListing ? escHtml(p.reporter_shop || p.store) : escHtml(p.reporter);
+  const statusLabel = isSellerListing ? '🏪 Seller Listed' : (p.verified ? '✓ Verified' : '📋 Pending Review');
   document.getElementById('detailInfo').innerHTML = `
     <div class="detail-info-item"><div class="detail-info-label">Store</div>${escHtml(p.store)}</div>
     <div class="detail-info-item"><div class="detail-info-label">City</div>${escHtml(p.city)}</div>
@@ -526,7 +526,7 @@ async function showProductDetail(id) {
     ${p.note ? `<div class="detail-info-item" style="grid-column:1/-1;"><div class="detail-info-label">Notes</div>${escHtml(p.note)}</div>` : ''}
   `;
 
-  const isOwner = currentUser && currentUser.role === 'seller' && p.reporter_id && currentUser.id === p.reporter_id;
+  const isOwner = currentUser && currentUser.role === 'seller' && p.reporter_id && currentUser.id === p.reporter_id && p.is_listing;
   const inWishlist = wishlist.some(w => w.id === p.id);
   if (isOwner) {
     document.getElementById('detailActions').innerHTML = `
