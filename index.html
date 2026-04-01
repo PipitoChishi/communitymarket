@@ -26,6 +26,9 @@
         <a href="#leaderboard" class="nav-link" id="nav-leaderboard">Leaderboard</a>
       </div>
       <div class="nav-actions">
+        <button class="wishlist-nav-btn" id="wishlistNavBtn" onclick="toggleWishlist()">
+          ❤️ <span class="wishlist-badge" id="wishlistBadge">0</span>
+        </button>
         <button class="cart-btn" id="cartNavBtn" onclick="toggleCart()">
           🛒 <span class="cart-badge" id="cartBadge">0</span>
         </button>
@@ -52,6 +55,8 @@
     <a href="#products" class="mob-link" onclick="closeMobile()">Products</a>
     <a href="#submit" class="mob-link" onclick="closeMobile()">Submit Price</a>
     <a href="#leaderboard" class="mob-link" onclick="closeMobile()">Leaderboard</a>
+    <a href="#" class="mob-link" onclick="toggleWishlist();closeMobile()">❤️ Wishlist</a>
+    <a href="#" class="mob-link" onclick="toggleCart();closeMobile()">🛒 Cart</a>
     <button class="btn-primary" onclick="openModal();closeMobile()">+ Report Price</button>
   </div>
 
@@ -676,6 +681,45 @@
           <button class="btn-ghost" onclick="closeEditProduct()">Cancel</button>
           <button class="btn-primary" onclick="saveEditProduct()">Save Changes ✓</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────── WISHLIST SIDEBAR ───────── -->
+  <div class="wishlist-overlay" id="wishlistOverlay" onclick="handleWishlistOverlay(event)">
+    <aside class="wishlist-panel" id="wishlistPanel">
+      <div class="cart-header">
+        <h2>❤️ Your Wishlist</h2>
+        <button class="modal-close" onclick="toggleWishlist()">✕</button>
+      </div>
+      <div class="cart-items" id="wishlistItems"></div>
+      <div class="wishlist-footer" id="wishlistFooter">
+        <button class="btn-primary full-width" onclick="moveAllWishlistToCart()">🛒 Move All to Cart</button>
+      </div>
+    </aside>
+  </div>
+
+  <!-- ───────── COMPARE MODAL ───────── -->
+  <div class="modal-overlay" id="compareOverlay" onclick="handleCompareOverlay(event)">
+    <div class="modal compare-modal" id="compareModal">
+      <div class="modal-header">
+        <h2>⚖️ Price Comparison</h2>
+        <button class="modal-close" onclick="closeCompareModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="compareContent">Loading comparison…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────── COMPARE FLOATING BAR ───────── -->
+  <div class="compare-bar" id="compareBar">
+    <div class="compare-bar-inner">
+      <div class="compare-bar-items" id="compareBarItems"></div>
+      <div class="compare-bar-actions">
+        <span class="compare-bar-count" id="compareBarCount">0 items selected</span>
+        <button class="btn-primary" id="compareBarBtn" onclick="openCompareModal()">⚖️ Compare Now</button>
+        <button class="btn-ghost" onclick="clearCompare()">Clear</button>
       </div>
     </div>
   </div>

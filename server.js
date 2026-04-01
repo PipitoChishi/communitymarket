@@ -239,6 +239,44 @@ app.get('/api/products', (req, res) => {
   }
 });
 
+// ── GET /api/products/compare ────────────────────────────
+app.get('/api/products/compare', (req, res) => {
+  try {
+    const idsParam = req.query.ids || '';
+    const ids = idsParam.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n > 0);
+    if (ids.length < 2 || ids.length > 4) {
+      return res.status(400).json({ error: 'Provide 2–4 product IDs to compare' });
+    }
+    const placeholders = ids.map(() => '?').join(',');
+    const products = query(
+      `SELECT * FROM price_reports WHERE id IN (${placeholders}) ORDER BY price ASC`,
+      ids
+    );
+    // Enrich with seller ratings
+    const enriched = products.map(p => {
+      let sellerRating = null;
+      if (p.reporter_id && p.reporter_role === 'seller') {
+        const agg = queryOne(
+          'SELECT ROUND(AVG(rating),1) AS avg_rating, COUNT(*) AS total FROM seller_ratings WHERE seller_id = ?',
+          [p.reporter_id]
+        );
+        sellerRating = { avg: agg?.avg_rating || 0, count: agg?.total || 0 };
+      }
+      return {
+        ...p,
+        verified: p.verified === 1,
+        time: relativeTime(p.created_at),
+        pctChange: pctChange(p.price, p.prev_price),
+        sellerRating,
+      };
+    });
+    res.json(enriched);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to compare products' });
+  }
+});
+
 // ── GET /api/products/:id ────────────────────────────────
 app.get('/api/products/:id', (req, res) => {
   try {
@@ -294,7 +332,7 @@ app.post('/api/products', (req, res) => {
       try { req.user = jwt.verify(token, JWT_SECRET); } catch (e) {}
     }
 
-    const { name, category, price, unit, store, city, reporter, note } = req.body;
+    const { name, category, price, unit, store, city, reporter, note, is_listing } = req.body;
 
     if (!name || !category || price === undefined || price === null) {
       return res.status(400).json({ error: 'name, category, and price are required' });
@@ -315,6 +353,7 @@ app.post('/api/products', (req, res) => {
     const storeName    = (store  || '').trim() || 'Unknown Store';
     const cityName     = (city   || '').trim() || 'Unknown City';
     const noteVal      = (note   || '').trim() || null;
+    const listingFlag  = is_listing ? 1 : 0;
 
     // Insert report
     let reporterRole = req.user?.role || 'anonymous';
@@ -326,10 +365,10 @@ app.post('/api/products', (req, res) => {
         storeName;
     }
     run(
-      `INSERT INTO price_reports (name,category,price,prev_price,unit,store,city,reporter,reporter_id,reporter_role,reporter_shop,note)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+      `INSERT INTO price_reports (name,category,price,prev_price,unit,store,city,reporter,reporter_id,reporter_role,reporter_shop,note,is_listing)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [name.trim(), category, numericPrice, prev_price, unit||'per kg', storeName, cityName,
-       reporterName, req.user?.id || null, reporterRole, reporterShop, noteVal]
+       reporterName, req.user?.id || null, reporterRole, reporterShop, noteVal, listingFlag]
     );
 
 
@@ -618,7 +657,7 @@ app.get('/api/seller/dashboard', authMiddleware, (req, res) => {
 
     const products = query(
       `SELECT id, name, category, price, prev_price, unit, store, city, note, verified, created_at
-       FROM price_reports WHERE reporter_id = ? ORDER BY created_at DESC`,
+       FROM price_reports WHERE reporter_id = ? AND is_listing = 1 ORDER BY created_at DESC`,
       [req.user.id]
     ).map(p => ({ ...p, pctChange: pctChange(p.price, p.prev_price), time: relativeTime(p.created_at) }));
 

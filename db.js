@@ -10,7 +10,11 @@ const fs         = require('fs');
 const path       = require('path');
 const initSqlJs  = require('sql.js');
 
-const DB_PATH = path.join(__dirname, 'pricewatch.db');
+const RENDER_DISK = '/opt/render/project/data';
+const DB_DIR = process.env.NODE_ENV === 'production' && require('fs').existsSync(RENDER_DISK)
+  ? RENDER_DISK
+  : __dirname;
+const DB_PATH = path.join(DB_DIR, 'pricewatch.db');
 
 // ── Helper: save DB to disk ──────────────────────────────
 function saveDb(db) {
@@ -162,6 +166,7 @@ async function initDb() {
     `ALTER TABLE price_reports ADD COLUMN reporter_id   INTEGER`,
     `ALTER TABLE price_reports ADD COLUMN reporter_role TEXT DEFAULT 'anonymous'`,
     `ALTER TABLE price_reports ADD COLUMN reporter_shop TEXT`,
+    `ALTER TABLE price_reports ADD COLUMN is_listing    INTEGER DEFAULT 0`,
   ];
   for (const m of migrations) {
     try { db.run(m); } catch (_) { /* column already exists */ }
